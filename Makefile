@@ -16,7 +16,6 @@ all: clear_terminal $(NAME)
 	@echo "\033[1;32m💥 Compilation terminée ! 💥\033[0m"
 	@echo "\033[1;33m🔨 Projet prêt ! 🎉\033[0m"
 	@echo "\033[1;33m🔨 Lancer avec ./$(NAME) 🎉\033[0m"
-	@echo "\033[1;33m✨ N'hésite pas à donner un outstanding project ! 🎉\033[0m"
 
 clear_terminal:
 	@clear
