@@ -24,3 +24,4 @@
 #include "ColorHandling.hpp"	// Color handling
 #include "Config.hpp"			// Config class
 #include <sstream>				// std::ostringstream
+#include "Macros.hpp"			// Macros

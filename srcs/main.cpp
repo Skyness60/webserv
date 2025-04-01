@@ -1,24 +1,35 @@
 #include "ServerManager.hpp"
 
+static bool checkConf(char *av)
+{
+	std::string conf(av);
+	std::string ext = ".conf";
+	if (conf.length() <= ext.length())
+		return false;
+	return conf.compare(conf.length() - ext.length(), ext.length(), ext) == 0;
+}
+
 int	main(int ac, char **av)
 {
 	try {
 		if (ac != 2)
-			throw std::invalid_argument("Usage: ./program <filename>");
+			throw std::invalid_argument("[webserv_main] ERROR Usage: ./webserv <config.conf>");
+		if (!checkConf(av[1]))
+			throw std::invalid_argument("[webserv_main] ERROR Invalid config file extension");
 		ServerManager server(av[1]);
 
 		// L'affichage des valeurs de configuration 
-        // std::vector<std::map<std::string, std::string> > configValues = server.getConfigValues();
-        // for (size_t i = 0; i < configValues.size(); ++i) {
-        //     std::cout << "Server " << i << ":" << std::endl;
-        //     for (std::map<std::string, std::string>::const_iterator it = configValues[i].begin(); it != configValues[i].end(); ++it) {
-        //         std::cout << "  " << it->first << ": " << it->second << std::endl;
-        //     }
-        // }
+		std::vector<std::map<std::string, std::string> > configValues = server.getConfigValues();
+		for (size_t i = 0; i < configValues.size(); ++i) {
+			std::cout << "Server " << i << ":" << std::endl;
+			std::cout << "[" << std::endl;
+			PRINT_CONFIG(configValues[i]);
+			std::cout << "]" << std::endl;
+		}
 		server.loadConfig();
 		// server.startServer();
 	} catch (const std::exception &e) {
-		std::cerr << BOLD_RED "Error: " << e.what() << RESET << std::endl;
+		std::cerr << BOLD_RED << e.what() << RESET << std::endl;
 		return 1;
 	}
 	return 0;

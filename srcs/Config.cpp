@@ -33,73 +33,90 @@ Config::~Config()
 }
 void Config::loadConfig()
 {
-    std::ifstream configFile(_filename.c_str());
-    std::string line;
-    if (!configFile.is_open())
-        throw std::runtime_error("Could not open config file");
+	int lineCount = 0;
+	int charCountAll = 0;
+	std::ifstream configFile(_filename.c_str());
+	std::string line;
+	if (!configFile.is_open())
+		throw std::runtime_error("[webserv_parser] ERROR \"" + _filename + "\" failed (No such file or directory)");
 
-    line = trimString(line); // Trim leading and trailing whitespace
-    std::cout << "Loading config file: " << _filename << std::endl;
+	line = trimString(line);
+	int charCount = 0;
 
-    std::map<std::string, std::string> currentServerConfig;
-    bool inServerBlock = false;
+	std::map<std::string, std::string> currentServerConfig;
+	bool inServerBlock = false;
 
-    while (std::getline(configFile, line))
-    {
-        line = trimString(line);
+	while (std::getline(configFile, line))
+	{
+		lineCount++;
+		line = trimString(line);
 
-        if (line.empty() || line[0] == '#')
-        {
-            continue;
-        }
+		if (line.empty() || line[0] == '#')
+		{
+			continue;
+		}
 
-        if (line == "server {")
-        {
-            if (inServerBlock)
-            {
-                throw std::runtime_error("Nested server blocks are not allowed");
-            }
-            inServerBlock = true;
-            currentServerConfig.clear();
-            continue;
-        }
+		charCount = 0;
+		for (std::string::const_iterator it = line.begin(); it != line.end(); ++it)
+			charCount++;
+		charCountAll += charCount;
+		if (line == "server {")
+		{
+			if (inServerBlock)
+			{
+				throw std::runtime_error("Nested server blocks are not allowed");
+			}
+			inServerBlock = true;
+			currentServerConfig.clear();
+			continue;
+		}
 
-        if (line == "}")
-        {
-            if (!inServerBlock)
-            {
-                throw std::runtime_error("Unexpected closing brace outside of server block");
-            }
-            inServerBlock = false;
-            _configValues.push_back(currentServerConfig);
-            continue;
-        }
+		if (line[0] == '}' && line.size() == 1)
+		{
+			if (!inServerBlock)
+			{
+				std::stringstream errorMsg;
+				errorMsg << "[webserv_parser] ERROR Failed to parse config \"" << _filename
+						 << "\": char " << charCountAll << " (line:" << lineCount << ", col:" << charCount << "): ";
+				throw std::runtime_error(errorMsg.str());
+			}
+			inServerBlock = false;
+			_configValues.push_back(currentServerConfig);
+			continue;
+		}
 
-        size_t semicolonPos = line.find(';');
-        if (semicolonPos != std::string::npos)
-        {
-            size_t spacePos = line.find_first_of(" \t");
+		size_t semicolonPos = line.find(';');
+		if (semicolonPos != std::string::npos)
+		{
+			size_t spacePos = line.find_first_of(" \t");
 
-            if (spacePos != std::string::npos && spacePos < semicolonPos)
-            {
-                std::string key = trimString(line.substr(0, spacePos));
-                std::string value = trimString(line.substr(spacePos + 1, semicolonPos - spacePos - 1));
+			if (spacePos != std::string::npos && spacePos < semicolonPos)
+			{
+				std::string key = trimString(line.substr(0, spacePos));
+				std::string value = trimString(line.substr(spacePos + 1, semicolonPos - spacePos - 1));
 
-                if (inServerBlock)
-                {
-                    currentServerConfig[key] = value;
-                }
-                else
-                {
-                    // Gérer les configs globales si nécessaire, ou les ignorer
-                }
-            }
-            else
-            {
-                // Gérer les clés sans valeurs si nécessaire, ou les ignorer
-            }
-        }
-    }
+				if (inServerBlock)
+				{
+					currentServerConfig[key] = value;
+				}
+				else
+				{
+					// Handle global configs if necessary, or ignore them
+				}
+			}
+			else
+			{
+				// Handle keys without values if necessary, or ignore them
+			}
+		}
+	}
+	if (inServerBlock)
+	{
+		std::stringstream errorMsg;
+		errorMsg << "[webserv_parser] ERROR Failed to parse config \"" << _filename
+		<< "\": char " << charCountAll << " (line:" << lineCount << ", col:" << charCount << ")";
+		throw std::runtime_error(errorMsg.str());
+	}
 	configFile.close();
 }
 
