@@ -1,12 +1,14 @@
 COMP = c++
 CFLAG = -Wall -Werror -Wextra -std=c++98 -MMD
-SRC_DIR = src
+SRC_DIR = srcs
 OBJ_DIR = obj
-INC_DIR = include
+INC_DIR = includes
 
 NAME = webserv
 
-SRC = main.cpp \
+SRC = srcs/main.cpp \
+		srcs/ServerManager.cpp \
+		srcs/Config.cpp \
 
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 
