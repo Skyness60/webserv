@@ -31,6 +31,31 @@ Config::~Config()
 {
 
 }
+
+/**
+ * @brief Charge les paramètres de configuration à partir d'un fichier.
+ *
+ * Cette fonction analyse un fichier de configuration, en extrayant les configurations de serveur.
+ * Elle gère les blocs de serveur, les paires clé-valeur et les conditions d'erreur telles que
+ * les blocs de serveur imbriqués ou les lignes mal formées.
+ *
+ * La configuration est stockée dans la variable membre `_configValues`, qui
+ * est un vecteur de maps, où chaque map représente la configuration d'un
+ * serveur unique. Chaque vecteur est indexé par l'ordre dans lequel les blocs de serveur apparaissent
+ *
+ * @throws std::runtime_error Si le fichier de configuration ne peut pas être ouvert,
+ * si des blocs de serveur imbriqués sont trouvés, ou si
+ * le fichier contient des erreurs de syntaxe.
+ *
+ * @note Cette fonction suppose que le fichier de configuration utilise une syntaxe similaire à :
+ * server {
+ * clé valeur;
+ * ...
+ * }
+ * Les lignes commençant par '#' sont traitées comme des commentaires et ignorées.
+ * Les espaces blancs sont supprimés du début et de la fin des lignes, des clés et des valeurs.
+ */
+
 void Config::loadConfig()
 {
 	int lineCount = 0;
@@ -101,12 +126,24 @@ void Config::loadConfig()
 				}
 				else
 				{
-					// Handle global configs if necessary, or ignore them
+                    /**
+                     * @brief Gère les configurations globales si nécessaire, ou les ignore.
+                     *
+                     * Ce bloc est exécuté lorsque la ligne contient une paire clé-valeur,
+                     * mais que nous ne sommes pas dans un bloc de serveur.
+                     * Actuellement, il n'y a pas de gestion pour ces configurations globales.
+                     */
 				}
 			}
 			else
 			{
-				// Handle keys without values if necessary, or ignore them
+               /**
+                 * @brief Gère les clés sans valeurs si nécessaire, ou les ignore.
+                 *
+                 * Ce bloc est exécuté lorsque la ligne contient un point-virgule,
+                 * mais qu'aucun espace n'est trouvé avant.
+                 * Actuellement, il n'y a pas de gestion pour ces clés sans valeurs.
+                 */
 			}
 		}
 	}
