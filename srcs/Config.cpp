@@ -1,5 +1,7 @@
 #include "Config.hpp"
 
+Config::Config() {}
+
 static std::string trimString(const std::string &str)
 {
     size_t start = str.find_first_not_of(" \t\n\r");
