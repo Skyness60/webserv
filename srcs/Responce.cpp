@@ -2,14 +2,10 @@
 
 Response::Response(int fd, std::string file, std::string cmd, Config &serv_conf) : _client_fd(fd), _path(file), _method(cmd) {
 	this->_config = serv_conf;
-	this->_list[0] = "GET";
-	this->_list[1] = "POST";
-	this->_list[2] = "DELETE";
-	this->f[0] = &Response::dealGet;
-	this->f[1] = &Response::dealPost;
-	this->f[2] = &Response::dealDelete;
+	this->_func[0] = std::make_pair("GET", &Response::dealGet);
+	this->_func[1] = std::make_pair("POST", &Response::dealPost);
+	this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
 }
-
 Response::~Response() {}
 
 
@@ -48,9 +44,11 @@ void Response::bad_method(){
 }
 
 void Response::oriente(){
-	for (int i = 0; i < 3; i++){
-		if (_list[i] == this->_method)
-			return (this->*f[i])();
+	for (size_t i = 0; i < 3; i++){
+		if (this->_func[i].first.compare(this->_method)) {
+			(this->*(_func[i].second))();
+			return ;
+		}
 	}
 	return this->bad_method();
 }
