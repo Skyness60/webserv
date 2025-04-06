@@ -6,6 +6,7 @@ Response::Response(int fd, std::string file, std::string cmd, Config &serv_conf)
 	this->_func[1] = std::make_pair("POST", &Response::dealPost);
 	this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
 }
+
 Response::~Response() {}
 
 
