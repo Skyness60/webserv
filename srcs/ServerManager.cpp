@@ -125,3 +125,13 @@ std::vector<std::map<std::string, std::string> > ServerManager::getConfigValues(
 {
 	return _config.getConfigValues();
 }
+
+std::vector<std::map<std::string, std::map<std::string, std::string> > > ServerManager::getLocationValues()
+{
+	return _config.getLocationValues();
+}
+
+std::string ServerManager::getLocationValue(int server, std::string locationKey, std::string valueKey)
+{
+	return _config.getLocationValue(server, locationKey, valueKey);
+}

@@ -55,5 +55,6 @@ void Response::oriente(){
 }
 
 void Response::sendClient(int code, std::string mthd){
-
+	(void)code;
+	(void)mthd;
 }

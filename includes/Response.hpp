@@ -13,7 +13,7 @@ class Response{
 		std::string _method;
 		Config	_config;
 		std::string _sentValue;
-		std::pair<std::string, void (Response::*)()> _func[];
+		std::pair<std::string, void (Response::*)()> _func[3];
 	public :
 		Response(int fd, std::string file, std::string cmd, Config &serv_conf);
 		~Response();

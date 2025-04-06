@@ -9,7 +9,6 @@ static std::string trimString(const std::string &str)
     return (start == std::string::npos || end == std::string::npos) ? "" : str.substr(start, end - start + 1);
 }
 
-
 Config::Config(std::string filename) : _filename(filename)
 {
     loadConfig();
@@ -29,134 +28,135 @@ Config &Config::operator=(const Config &copy)
     return *this;
 }
 
-Config::~Config()
-{
-
-}
-
-/**
- * @brief Charge les paramètres de configuration à partir d'un fichier.
- *
- * Cette fonction analyse un fichier de configuration, en extrayant les configurations de serveur.
- * Elle gère les blocs de serveur, les paires clé-valeur et les conditions d'erreur telles que
- * les blocs de serveur imbriqués ou les lignes mal formées.
- *
- * La configuration est stockée dans la variable membre `_configValues`, qui
- * est un vecteur de maps, où chaque map représente la configuration d'un
- * serveur unique. Chaque vecteur est indexé par l'ordre dans lequel les blocs de serveur apparaissent
- *
- * @throws std::runtime_error Si le fichier de configuration ne peut pas être ouvert,
- * si des blocs de serveur imbriqués sont trouvés, ou si
- * le fichier contient des erreurs de syntaxe.
- *
- * @note Cette fonction suppose que le fichier de configuration utilise une syntaxe similaire à :
- * server {
- * clé valeur;
- * ...
- * }
- * Les lignes commençant par '#' sont traitées comme des commentaires et ignorées.
- * Les espaces blancs sont supprimés du début et de la fin des lignes, des clés et des valeurs.
- */
+Config::~Config() {}
 
 void Config::loadConfig()
 {
-	int lineCount = 0;
-	int charCountAll = 0;
-	std::ifstream configFile(_filename.c_str());
+    std::ifstream configFile(_filename.c_str());
+    if (!configFile.is_open())
+        throw std::runtime_error("[webserv_parser] ERROR Failed to open file \"" + _filename + "\"");
+
+    std::map<std::string, std::string> currentServerConfig;
+    std::map<std::string, std::map<std::string, std::string> > currentLocationMap;
+    std::map<std::string, std::string> currentLocationConfig;
+    bool inServerBlock = false;
+    bool inLocationBlock = false;
 	std::string line;
-	if (!configFile.is_open())
-		throw std::runtime_error("[webserv_parser] ERROR \"" + _filename + "\" failed (No such file or directory)");
+    std::string currentLocationPath;
 
-	line = trimString(line);
-	int charCount = 0;
+    int lineCount = 0;
+    int charCountAll = 0;
+	int charCountLine = 0;
+    while (std::getline(configFile, line))
+    {
+		charCountLine = static_cast<int>(line.length());
+        lineCount++;
+        line = trimString(line);
 
-	std::map<std::string, std::string> currentServerConfig;
-	bool inServerBlock = false;
+        if (line.empty() || line[0] == '#')
+            continue;
 
-	while (std::getline(configFile, line))
-	{
-		lineCount++;
-		line = trimString(line);
+        charCountAll += static_cast<int>(line.length());
 
-		if (line.empty() || line[0] == '#')
-		{
-			continue;
-		}
+        if (line == "server {")
+        {
+            handleServerBlockStart(inServerBlock, currentServerConfig, currentLocationMap, lineCount, charCountAll, charCountLine);
+            inServerBlock = true;
+            continue;
+        }
 
-		charCount = 0;
-		for (std::string::const_iterator it = line.begin(); it != line.end(); ++it)
-			charCount++;
-		charCountAll += charCount;
-		if (line == "server {")
-		{
-			if (inServerBlock)
-			{
-				throw std::runtime_error("Nested server blocks are not allowed");
-			}
-			inServerBlock = true;
-			currentServerConfig.clear();
-			continue;
-		}
+        if (line == "}")
+        {
+            handleBlockEnd(inLocationBlock, inServerBlock, currentLocationConfig, currentLocationMap, currentServerConfig, currentLocationPath);
+            continue;
+        }
 
-		if (line[0] == '}' && line.size() == 1)
-		{
-			if (!inServerBlock)
-			{
-				std::stringstream errorMsg;
-				errorMsg << "[webserv_parser] ERROR Failed to parse config \"" << _filename
-						 << "\": char " << charCountAll << " (line:" << lineCount << ", col:" << charCount << "): ";
-				throw std::runtime_error(errorMsg.str());
-			}
-			inServerBlock = false;
-			_configValues.push_back(currentServerConfig);
-			continue;
-		}
+        if (line.substr(0, 8) == "location")
+        {
+            handleLocationBlockStart(line, inLocationBlock, currentLocationPath, currentLocationConfig, lineCount, charCountAll, charCountLine);
+            continue;
+        }
 
-		size_t semicolonPos = line.find(';');
-		if (semicolonPos != std::string::npos)
-		{
-			size_t spacePos = line.find_first_of(" \t");
+        processLine(line, inLocationBlock, inServerBlock, currentLocationConfig, currentServerConfig, lineCount, charCountAll, charCountLine);
+    }
 
-			if (spacePos != std::string::npos && spacePos < semicolonPos)
-			{
-				std::string key = trimString(line.substr(0, spacePos));
-				std::string value = trimString(line.substr(spacePos + 1, semicolonPos - spacePos - 1));
+    if (inServerBlock || inLocationBlock)
+        throwError("Failed to parse config", lineCount, charCountAll, charCountLine);
 
-				if (inServerBlock)
-				{
-					currentServerConfig[key] = value;
-				}
-				else
-				{
-                    /**
-                     * @brief Gère les configurations globales si nécessaire, ou les ignore.
-                     *
-                     * Ce bloc est exécuté lorsque la ligne contient une paire clé-valeur,
-                     * mais que nous ne sommes pas dans un bloc de serveur.
-                     * Actuellement, il n'y a pas de gestion pour ces configurations globales.
-                     */
-				}
-			}
-			else
-			{
-               /**
-                 * @brief Gère les clés sans valeurs si nécessaire, ou les ignore.
-                 *
-                 * Ce bloc est exécuté lorsque la ligne contient un point-virgule,
-                 * mais qu'aucun espace n'est trouvé avant.
-                 * Actuellement, il n'y a pas de gestion pour ces clés sans valeurs.
-                 */
-			}
-		}
-	}
-	if (inServerBlock)
-	{
-		std::stringstream errorMsg;
-		errorMsg << "[webserv_parser] ERROR Failed to parse config \"" << _filename
-		<< "\": char " << charCountAll << " (line:" << lineCount << ", col:" << charCount << ")";
-		throw std::runtime_error(errorMsg.str());
-	}
-	configFile.close();
+    configFile.close();
+}
+
+void Config::handleServerBlockStart(bool &inServerBlock, std::map<std::string, std::string> &currentServerConfig, std::map<std::string, std::map<std::string, std::string> > &currentLocationMap, int lineCount, int charCountAll, int charCountLine)
+{
+    if (inServerBlock)
+    {
+        throwError("Nested server block", lineCount, charCountAll, charCountLine);
+    }
+    currentServerConfig.clear();
+    currentLocationMap.clear();
+}
+
+void Config::handleBlockEnd(bool &inLocationBlock, bool &inServerBlock, std::map<std::string, std::string> &currentLocationConfig, std::map<std::string, std::map<std::string, std::string> > &currentLocationMap, std::map<std::string, std::string> &currentServerConfig, std::string &currentLocationPath)
+{
+    if (inLocationBlock)
+    {
+        currentLocationMap[currentLocationPath] = currentLocationConfig;
+        currentLocationConfig.clear();
+        inLocationBlock = false;
+    }
+    else if (inServerBlock)
+    {
+        _configValues.push_back(currentServerConfig);
+        _locationValues.push_back(currentLocationMap);
+        inServerBlock = false;
+    }
+}
+
+void Config::handleLocationBlockStart(const std::string &line, bool &inLocationBlock, std::string &currentLocationPath, std::map<std::string, std::string> &currentLocationConfig, int lineCount, int charCountAll, int charCountLine)
+{
+    size_t bracePos = line.find('{');
+    if (bracePos != std::string::npos)
+    {
+        currentLocationPath = trimString(line.substr(0, bracePos));
+        inLocationBlock = true;
+        currentLocationConfig.clear();
+    }
+    else
+    {
+        throwError("Malformed location block (missing {)", lineCount, charCountAll, charCountLine);
+    }
+}
+
+void Config::processLine(const std::string &line, bool inLocationBlock, bool inServerBlock, std::map<std::string, std::string> &currentLocationConfig, std::map<std::string, std::string> &currentServerConfig, int lineCount, int charCountAll, int charCountLine)
+{
+    size_t semicolonPos = line.find(';');
+    if (semicolonPos != std::string::npos)
+    {
+        size_t spacePos = line.find_first_of(" \t");
+        if (spacePos != std::string::npos && spacePos < semicolonPos)
+        {
+            std::string key = trimString(line.substr(0, spacePos));
+            std::string value = trimString(line.substr(spacePos + 1, semicolonPos - spacePos - 1));
+
+            if (inLocationBlock)
+                currentLocationConfig[key] = value;
+            else if (inServerBlock)
+                currentServerConfig[key] = value;
+        }
+        else
+        {
+            throwError("Malformed directive", lineCount, charCountAll, charCountLine);
+        }
+    }
+}
+
+void Config::throwError(const std::string &errorMsg, int lineCount, int charCountAll, int charCountLine)
+{
+    std::stringstream error;
+    error << "[webserv_parser] ERROR " << errorMsg
+          << " in file \"" << _filename << "\" at char " << charCountAll
+          << " (line " << lineCount << ", column " << charCountLine << ")";
+    throw std::runtime_error(error.str());
 }
 
 std::string Config::getConfigValue(int serverIndex, std::string key)
@@ -173,4 +173,25 @@ std::string Config::getConfigValue(int serverIndex, std::string key)
 std::vector<std::map<std::string, std::string> > Config::getConfigValues()
 {
     return _configValues;
+}
+
+std::vector<std::map<std::string, std::map<std::string, std::string> > > Config::getLocationValues()
+{
+    return _locationValues;
+}
+
+std::string Config::getLocationValue(int serverIndex, std::string locationKey, std::string valueKey)
+{
+    if (serverIndex < 0 || serverIndex >= static_cast<int>(_locationValues.size()))
+        return "";
+
+    std::map<std::string, std::map<std::string, std::string> >::iterator it = _locationValues.at(serverIndex).find(locationKey);
+    if (it == _locationValues.at(serverIndex).end())
+        return "";
+
+    std::map<std::string, std::string>::iterator innerIt = it->second.find(valueKey);
+    if (innerIt == it->second.end())
+        return "";
+
+    return innerIt->second;
 }
