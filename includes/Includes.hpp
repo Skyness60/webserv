@@ -10,7 +10,7 @@
 #include <sys/wait.h>			// waitpid
 #include <sys/select.h>			// select, FD_SET, FD_ZERO, FD_ISSET
 #include <poll.h>				// poll
-//#include <sys/epoll.h>			// epoll_create, epoll_ctl, epoll_wait
+#include <sys/epoll.h>			// epoll_create, epoll_ctl, epoll_wait
 #include <sys/time.h>			// struct timeval (pour select/poll)
 #include <dirent.h>				// opendir, readdir, closedir
 #include <signal.h>				// kill, signal
@@ -25,4 +25,4 @@
 #include "Config.hpp"			// Config class
 #include <sstream>				// std::ostringstream
 #include "Macros.hpp"			// Macros
-#include <sys/event.h>          // for MAC
+//#include <sys/event.h>          // for MAC
