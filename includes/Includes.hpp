@@ -26,5 +26,4 @@
 #include <sstream>				// std::ostringstream
 #include <fstream>				// std::ifstream
 #include "Macros.hpp"			// Macros
-#include "Macros.hpp"			// Macros
 //#include <sys/event.h>          // for MAC
