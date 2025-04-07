@@ -124,11 +124,26 @@ void ServerManager::startServer()
 
 			std::cout << "New connection on server " << i << " (port " << getConfigValue(static_cast<int>(i), "listen") << ")" << std::endl;
 
-			// Here you can add code to:
-			// 1. Read data from the client
-			// 2. Process the data
-			// 3. Send a response
-			// 4. Close the connection or keep communicating
+			char buffer[1024] = {0};
+			int valread = read(new_socket, buffer, sizeof(buffer));
+			if (valread > 0)
+			{
+				std::string rawRequest(buffer, valread);
+				std::cout << "Received request: " << buffer << std::endl;
+				ClientRequest request;
+				if (request.parse(rawRequest))
+				{
+					std::cout << "Parsed request:" << std::endl;
+					request.printRequest();
+					// Handle the request here
+					Response response(new_socket, request.getPath(), request.getMethod(), _config);
+					response.oriente();
+				}
+				else
+				{
+					std::cerr << "Failed to parse request." << std::endl;
+				}
+			}
 		}
 	}
 }

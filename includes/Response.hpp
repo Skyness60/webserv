@@ -1,17 +1,17 @@
 #pragma once
 
 #include "Includes.hpp"
-#include "Config.hpp"
-#include "Macros.hpp"
 
-class Config;
+class Config; // Forward declaration of Config class
+#include "Response.hpp"
+#include "Config.hpp" // Inclure la définition complète ici
 
 class Response{
 	private :
 		int _client_fd;
 		std::string _path;
 		std::string _method;
-		Config	_config;
+		Config	&_config;
 		std::string _sentValue;
 		std::pair<std::string, void (Response::*)()> _func[3];
 	public :

@@ -27,4 +27,6 @@
 #include <fstream>				// std::ifstream
 #include "Macros.hpp"			// Macros
 #include <cstdlib>				// std lib c
-//#include <sys/event.h>          // for MAC
+#include "ClientRequest.hpp"	// ClientRequest class
+#include "Response.hpp"			// Response class
+//#include <sys/event.h>		// for MAC
