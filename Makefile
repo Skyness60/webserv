@@ -9,7 +9,7 @@ NAME = webserv
 SRC = srcs/main.cpp \
 		srcs/ServerManager.cpp \
 		srcs/Config.cpp \
-		srcs/Responce.cpp \
+		srcs/Response.cpp \
 		srcs/ClientRequest.cpp
 
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
