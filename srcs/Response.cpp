@@ -1,7 +1,6 @@
 # include "Response.hpp"
 
-Response::Response(int fd, std::string file, std::string cmd, Config &serv_conf) : _client_fd(fd), _path(file), _method(cmd) {
-	this->_config = serv_conf;
+Response::Response(int fd, std::string file, std::string cmd, Config &serv_conf) : _client_fd(fd), _path(file), _method(cmd), _config(serv_conf), _sentValue("") {
 	this->_func[0] = std::make_pair("GET", &Response::dealGet);
 	this->_func[1] = std::make_pair("POST", &Response::dealPost);
 	this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
@@ -20,8 +19,9 @@ Response &Response::operator=(const Response &other){
 	return *this;
 }
 
-Response::Response(const Response &other) {
-	*this = other;
+Response::Response(const Response &other)
+    : _client_fd(other._client_fd), _path(other._path), _method(other._method), _config(other._config) {
+
 }
 
 void Response::modifSentValue(std::string str){
