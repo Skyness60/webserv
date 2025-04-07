@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/06 17:59:16 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/07 11:26:27 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -103,7 +103,7 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
         
         // Parse body (for POST )
         if (_headers.find("Content-Length") != _headers.end()) {
-            size_t content_length = std::strtoul(_headers["Content-Length"].c_str(), NULL, 10);
+            size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
             char body_buffer[content_length + 1];
             request_stream.read(body_buffer, content_length);
             body_buffer[content_length] = '\0';

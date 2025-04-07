@@ -25,4 +25,5 @@
 #include "Config.hpp"			// Config class
 #include <sstream>				// std::ostringstream
 #include "Macros.hpp"			// Macros
-//#include <sys/event.h>          // for MAC
+//#include <sys/event.h>        // for MAC
+#include <cstdlib>              // strtoul
