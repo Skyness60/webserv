@@ -44,75 +44,92 @@ void ServerManager::loadConfig()
 
 void ServerManager::startServer()
 {
-    int server_fd;                 // Identifiant de notre "porte d'entrée" principale
-    struct sockaddr_in address;    // Structure qui va contenir l'adresse de notre serveur
-    int opt = 1;                   // Option pour configurer la porte
-    int addrlen = sizeof(address); // Taille de la structure d'adresse
+	std::vector<int> server_fds;
+	std::vector<struct sockaddr_in> addresses;
 
-	/* 
-     * Création de la porte d'entrée principale (socket)
-     * AF_INET = utilise IPv4 (le système d'adressage standard d'Internet)
-     * SOCK_STREAM = utilise TCP (communication fiable où les données arrivent dans l'ordre)
-     */
-	server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (server_fd == -1)
-		throw std::runtime_error("Could not create socket");
+	// Create a socket and bind it for each server configuration
+	for (int i = 0; i < getServersCount(); ++i)
+	{
+		int server_fd;
+		struct sockaddr_in address;
+		int opt = 1;
 
-	/*
-     * Configuration de la porte pour qu'elle puisse être réutilisée rapidement
-     * Utile pendant le développement quand on redémarre souvent le serveur
-     */
-	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1)
-		throw std::runtime_error("Could not set socket options");
-	
-    /*
-     * Définition de l'adresse où notre porte va être installée
-     * sin_family = AF_INET (utilise IPv4)
-     * sin_addr.s_addr = INADDR_ANY (accepte les connexions de n'importe quelle adresse)
-     * sin_port = 8080 (le numéro de port où les clients doivent se connecter)
-     */
+		// Check if "listen" key exists in the configuration
+		std::string listenValue;
+		try
+		{
+			listenValue = getConfigValue(i, "listen");
+		}
+		catch (const std::exception &e)
+		{
+			std::cerr << "Error: Missing 'listen' configuration for server " << i << ". Skipping this server." << std::endl;
+			continue;
+		}
 
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(8080);  // htons convertit le numéro au format réseau
+		// Validate the listen value (e.g., ensure it's a valid port number)
+		int port = std::atoi(listenValue.c_str());
+		if (port <= 0 || port > 65535)
+		{
+			std::cerr << "Error: Invalid 'listen' value for server " << i << ": " << listenValue << ". Skipping this server." << std::endl;
+			continue;
+		}
 
-    /*
-     * Attache la porte à l'adresse définie
-     * C'est comme installer officiellement notre porte à l'adresse choisie
-     */
+		server_fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (server_fd == -1)
+		{
+			std::cerr << "Error: Could not create socket for server " << i << ". Skipping this server." << std::endl;
+			continue;
+		}
 
-	if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1)
-		throw std::runtime_error("Could not bind socket");
+		if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1)
+		{
+			std::cerr << "Error: Could not set socket options for server " << i << ". Skipping this server." << std::endl;
+			close(server_fd);
+			continue;
+		}
 
-    /*
-     * Met la porte en mode "écoute"
-     * Le serveur attend que des clients se connectent
-     * Le chiffre 10 est la taille de la file d'attente (combien de clients peuvent attendre)
-     */
+		address.sin_family = AF_INET;
+		address.sin_addr.s_addr = INADDR_ANY;
+		address.sin_port = htons(static_cast<uint16_t>(port));
 
-	if (listen(server_fd, 10) == -1)
-		throw std::runtime_error("Could not listen on socket");
-	
-	std::cout << "Server listening on port 8080" << std::endl;
+		if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1)
+		{
+			std::cerr << "Error: Could not bind socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
+			close(server_fd);
+			continue;
+		}
 
-    /*
-     * Boucle infinie qui attend et accepte les connexions entrantes
-     * Pour chaque nouvelle connexion, une nouvelle "porte" (socket) est créée
-     * Mais actuellement, le code ne fait rien avec ces connexions!
-     */
+		if (listen(server_fd, 10) == -1)
+		{
+			std::cerr << "Error: Could not listen on socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
+			close(server_fd);
+			continue;
+		}
 
+		std::cout << "Server " << i << " listening on port " << port << std::endl;
+
+		server_fds.push_back(server_fd);
+		addresses.push_back(address);
+	}
+
+	// Infinite loop to handle incoming connections for all servers
 	while (true)
 	{
-		int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-		if (new_socket == -1)
-			throw std::runtime_error("Could not accept connection");
-		
-		std::cout << "New connection" << std::endl;
-        // Ici il faudrait ajouter du code pour:
-        // 1. Lire les données envoyées par le client
-        // 2. Traiter ces données
-        // 3. Envoyer une réponse
-        // 4. Fermer la connexion ou continuer à communiquer
+		for (size_t i = 0; i < server_fds.size(); ++i)
+		{
+			int addrlen = sizeof(addresses[i]);
+			int new_socket = accept(server_fds[i], (struct sockaddr *)&addresses[i], (socklen_t *)&addrlen);
+			if (new_socket == -1)
+				continue; // Non-blocking accept, skip if no connection
+
+			std::cout << "New connection on server " << i << " (port " << getConfigValue(static_cast<int>(i), "listen") << ")" << std::endl;
+
+			// Here you can add code to:
+			// 1. Read data from the client
+			// 2. Process the data
+			// 3. Send a response
+			// 4. Close the connection or keep communicating
+		}
 	}
 }
 
@@ -134,4 +151,9 @@ std::vector<std::map<std::string, std::map<std::string, std::string> > > ServerM
 std::string ServerManager::getLocationValue(int server, std::string locationKey, std::string valueKey)
 {
 	return _config.getLocationValue(server, locationKey, valueKey);
+}
+
+int	ServerManager::getServersCount()
+{
+	return _config.getConfigValues().size();
 }
