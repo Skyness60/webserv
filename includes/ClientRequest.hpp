@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/06 17:50:21 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/07 12:19:50 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,8 +34,12 @@ class ClientRequest {
         ~ClientRequest();
 
         bool                parse( std::string const & rawRequest);
-        void                parseBody();
+        bool                parseMethod( std::istringstream & stream );
+        void                parseHeaders( std::istringstream & stream );
+        void                parseBody( std::istringstream & request_stream );
+        void                parseContentType();
         void                parseFormUrlEncoded();
+        void                parseMultipartFormData();
         void                testClientRequestParsing();
         void                printRequest();
 

@@ -16,7 +16,7 @@ OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 DEP = $(OBJ:.o=.d)
 
 all: clear_terminal $(NAME)
-	@echo "\033[1;32m💥 CXXilation terminée ! 💥\033[0m"
+	@echo "\033[1;32m💥 Compilation terminée ! 💥\033[0m"
 	@echo "\033[1;33m🔨 Projet prêt ! 🎉\033[0m"
 	@echo "\033[1;33m🔨 Lancer avec ./$(NAME) 🎉\033[0m"
 

@@ -6,22 +6,22 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/07 11:26:27 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/07 12:59:59 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ClientRequest.hpp"
 
-/*HTTP Reques = GET*/ 
+/*HTTP Request = GET*/ 
 // GET /index.html HTTP/1.1                 <--------- Method line
 // Host: test.com                           <---------- Header line (key : value)
 // User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
 // Accept: text/html,application/xhtml+xml
 // Accept-Language: en-US,en;q=0.9
 // Connection: keep-alive
-//                                          <--------- emty line = end of header
+//                                          <--------- empty line = end of header
 
-/*HTTP Reques = POST*/ 
+/*HTTP Request = POST*/ 
 // POST /submit-form HTTP/1.1               <--------- Method line
 // Host: example.com                        <---------- Header line (key : value)
 // Content-Type: application/x-www-form-urlencoded  <---------- format of the data in the body
@@ -29,7 +29,7 @@
 
 // name=John&age=25&email=john@example.com // <--------- body: The actual data being sent
 
-/*HTTP Reques = DELETE*/ 
+/*HTTP Request = DELETE*/ 
 // DELETE /users/123 HTTP/1.1               <--------- resource to delete in the URL path
 // Host: example.com
 // Authorization: Bearer token123              
@@ -63,33 +63,30 @@ std::map<std::string, std::string> ClientRequest::getHeaders() const { return _h
 //--------------------------------------------------------------Methods
 
 
-bool ClientRequest::parse( std::string const & rawRequest ) {
+bool ClientRequest::parseMethod( std::istringstream & stream ) {
     
-    std::istringstream request_stream(rawRequest);
     std::string line;
-    
-    // Parse the method line
-    if (!std::getline(request_stream, line) || line.empty()) {
-        return false;
-    }
-    if (line[line.length() - 1] == '\r') {
-        line = line.substr(0, line.length() - 1);
-    }
+    if (!std::getline(stream, line) || line.empty())
+        return (false);
+        
+    if (!line.empty() && line[line.size() - 1] == '\r')
+        line.erase(line.size() - 1);
         
     std::istringstream line_stream(line);
-    if (!(line_stream >> _method >> _path >> _httpVersion)) {
-        return false;
-    }
-        
-    // Parse header
-    while (std::getline(request_stream, line) && !line.empty()) {
-        
-        if (line[line.length() - 1] == '\r') {
-            line = line.substr(0, line.length() - 1);
-        }
-        if (line.empty()) {
-                break;
-        }
+    if (!(line_stream >> _method >> _path >> _httpVersion))
+        return (false);
+    return (true);
+}
+
+void ClientRequest::parseHeaders( std::istringstream & stream ) {
+    
+    std::string line;
+    while (std::getline(stream, line) && !line.empty()) {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+        if (line.empty())
+            break;
+            
         size_t colon_pos = line.find(':');
         if (colon_pos != std::string::npos) {
             std::string key = line.substr(0, colon_pos);
@@ -97,54 +94,81 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
             if (value_pos != std::string::npos) {
                 std::string value = line.substr(value_pos);
                 _headers[key] = value;
-                }
             }
         }
-        
-        // Parse body (for POST )
-        if (_headers.find("Content-Length") != _headers.end()) {
-            size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
-            char body_buffer[content_length + 1];
-            request_stream.read(body_buffer, content_length);
-            body_buffer[content_length] = '\0';
-            _body = std::string(body_buffer, content_length);
-        }
-        return (true);
+    }
 }
 
-void ClientRequest::parseBody() {
+bool ClientRequest::parse( std::string const & rawRequest ) {
     
-    if (_headers.find("Content-Length") == _headers.end() && 
-        _headers.find("Transfer-Encoding") == _headers.end()) {
+    std::istringstream request_stream(rawRequest);
+    if (!parseMethod(request_stream))
+        return (false);
+    parseHeaders(request_stream);
+    parseBody(request_stream);
+    parseContentType();
+    
+    return (true);
+}
+
+void ClientRequest::parseBody( std::istringstream & request_stream ) {
+
+    // Process non-chunked body (Content-Length)
+    if (_headers.find("Content-Length") != _headers.end()) {
+        size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
+        
+        char* body_buffer = new char[content_length + 1];
+        request_stream.read(body_buffer, content_length);
+        body_buffer[content_length] = '\0';
+        _body = std::string(body_buffer, content_length);
+       
+        delete[] body_buffer;
+    }
+
+    // Process chunked body (Transfer-Encoding)
+    else if (_headers.find("Transfer-Encoding") != _headers.end() && _headers["Transfer-Encoding"] == "chunked") {
+        std::string decoded;
+        std::string line;
+        
+        while (std::getline(request_stream, line)) {
+            if (!line.empty() && line[line.size() - 1] == '\r')
+                line.erase(line.size() - 1);
+                
+            size_t chunk_size = strtoul(line.c_str(), NULL, 16);
+            if (chunk_size == 0)
+                break;
+                
+            char* buffer = new char[chunk_size];
+            request_stream.read(buffer, chunk_size);
+            decoded.append(buffer, chunk_size);
+            
+            delete[] buffer;
+            
+            std::getline(request_stream, line);
+        }
+        _body = decoded;
+    }
+}
+
+void ClientRequest::parseContentType() {
+    
+    if (_headers.find("Content-Type") == _headers.end())
         return;
-    }
-
-    if (_headers.find("Transfer-Encoding") != _headers.end() && 
-        _headers["Transfer-Encoding"] == "chunked") {
-        // TO DO
-    }
-
-    else if (_headers.find("Content-Length") != _headers.end()) {
-        // TO DO
-    }
-    
-    if (_headers.find("Content-Type") != _headers.end()) {
-        std::string contentType = _headers["Content-Type"];
         
-        if (contentType.find("application/x-www-form-urlencoded") != std::string::npos) {
-            parseFormUrlEncoded();
-        }
-        else if (contentType.find("multipart/form-data") != std::string::npos) {
-            //parseMultipartFormData();
-        }
-        else if (contentType.find("application/json") != std::string::npos) {
-            //parseJson();
-        }
-        else if (contentType.find("text/plain") != std::string::npos) {
-            //parseText();
+    std::string contentType = _headers["Content-Type"];
+    if (contentType.find("application/x-www-form-urlencoded") != std::string::npos) {
+        parseFormUrlEncoded();
+    }
+    else if (contentType.find("multipart/form-data") != std::string::npos) {
+        parseMultipartFormData();
+    }
+    else if (contentType.find("application/json") != std::string::npos) {
+            // parseJson(); TO DO
+    }
+    else if (contentType.find("text/plain") != std::string::npos) {
+            // parseText(); TO DO
         }
     }
-}
 
 void ClientRequest::parseFormUrlEncoded() {
     
@@ -157,6 +181,54 @@ void ClientRequest::parseFormUrlEncoded() {
         formData[key] = value;
     }
     _formData = formData;
+}
+
+void ClientRequest::parseMultipartFormData() {
+
+    std::string contentType = _headers["Content-Type"];
+    std::string boundaryPrefix = "boundary=";
+    size_t boundaryPos = contentType.find(boundaryPrefix);
+    if (boundaryPos == std::string::npos)
+        return;
+    std::string boundary = "--" + contentType.substr(boundaryPos + boundaryPrefix.length());
+    
+    size_t i = 0;
+    while (true) {
+        
+        size_t start = _body.find(boundary, i);
+        if (start == std::string::npos)
+            break;
+        start += boundary.length();
+        if (_body.substr(start, 2) == "--")
+            break;
+        if (_body.substr(start, 2) == "\r\n")
+            start += 2;
+        size_t end = _body.find(boundary, start);
+        if (end == std::string::npos)
+            break;
+        
+        std::string part = _body.substr(start, end - start);
+        
+        size_t headerEnd = part.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            std::string headersPart = part.substr(0, headerEnd);
+            std::string content = part.substr(headerEnd + 4);
+            
+            size_t dispositionPos = headersPart.find("Content-Disposition:");
+            if (dispositionPos != std::string::npos) {
+                size_t namePos = headersPart.find("name=", dispositionPos);
+                if (namePos != std::string::npos) {
+                    namePos += 6; // skip 'name="' (5 chars + ")
+                    size_t quoteEnd = headersPart.find("\"", namePos);
+                    if (quoteEnd != std::string::npos) {
+                        std::string fieldName = headersPart.substr(namePos, quoteEnd - namePos);
+                        _formData[fieldName] = content;
+                    }
+                }
+            }
+        }
+        i = end;
+    }
 }
 
 void ClientRequest::printRequest() {
@@ -178,7 +250,6 @@ void ClientRequest::printRequest() {
 void ClientRequest::testClientRequestParsing() {
 
     std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
-    
     std::string testRequest = 
         "GET /index.html HTTP/1.1\r\n"
         "Host: localhost:8080\r\n"
@@ -195,6 +266,7 @@ void ClientRequest::testClientRequestParsing() {
         request.printRequest();
     }
     
+    std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
     std::string testPostRequest = 
         "POST /submit-form HTTP/1.1\r\n"
         "Host: localhost:8080\r\n"
@@ -206,12 +278,37 @@ void ClientRequest::testClientRequestParsing() {
     ClientRequest postRequest;
     bool postParseSuccess = postRequest.parse(testPostRequest);
     
-    std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
+    
     std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
     if (postParseSuccess) {
         postRequest.printRequest();
     }
+
+    std::cout << FBLU("\n======== Testing POST CHUNCKED Method ========\n") << std::endl;
+    std::string testChunkedRequest = 
+    "POST /chunked HTTP/1.1\r\n"
+    "Host: localhost:8080\r\n"
+    "Transfer-Encoding: chunked\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "7\r\n"
+    "Mozilla\r\n"
+    "9\r\n"
+    "Developer\r\n"
+    "7\r\n"
+    "Network\r\n"
+    "0\r\n"
+    "\r\n";
+
+    ClientRequest chunkedRequest;
+    bool chunkedParseSuccess = chunkedRequest.parse(testChunkedRequest);
+
+    std::cout << "Parsing result: " << (chunkedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    if (chunkedParseSuccess) {
+        chunkedRequest.printRequest();
+    }
     
+    std::cout << FBLU("\n======== Testing DELETE Method ========\n") << std::endl;
     std::string testDeleteRequest = 
         "DELETE /users/123 HTTP/1.1\r\n"
         "Host: localhost:8080\r\n"
@@ -221,7 +318,6 @@ void ClientRequest::testClientRequestParsing() {
     ClientRequest deleteRequest;
     bool deleteParseSuccess = deleteRequest.parse(testDeleteRequest);
     
-    std::cout << FBLU("\n======== Testing DELETE Method ========\n") << std::endl;
     std::cout << "Parsing result: " << (deleteParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
     if (deleteParseSuccess) {
         deleteRequest.printRequest();
