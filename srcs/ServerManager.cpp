@@ -140,9 +140,7 @@ void ServerManager::startServer()
 					response.oriente();
 				}
 				else
-				{
-					std::cerr << "Failed to parse request." << std::endl;
-				}
+					throw std::runtime_error("Failed to parse request");
 			}
 		}
 	}
