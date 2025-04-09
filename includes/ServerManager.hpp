@@ -15,4 +15,7 @@ class ServerManager {
 		void startServer();
 		std::string getConfigValue(int server, std::string key);
 		std::vector<std::map<std::string, std::string> > getConfigValues();
+		std::vector<std::map<std::string, std::map<std::string, std::string> > > getLocationValues();
+		std::string getLocationValue(int server, std::string locationKey, std::string valueKey);
+		int getServersCount();
 };

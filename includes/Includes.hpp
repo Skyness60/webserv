@@ -24,6 +24,9 @@
 #include "ColorHandling.hpp"	// Color handling
 #include "Config.hpp"			// Config class
 #include <sstream>				// std::ostringstream
+#include <fstream>				// std::ifstream
 #include "Macros.hpp"			// Macros
-//#include <sys/event.h>        // for MAC
-#include <cstdlib>              // strtoul
+#include <cstdlib>				// std lib c
+#include "ClientRequest.hpp"	// ClientRequest class
+#include "Response.hpp"			// Response class
+//#include <sys/event.h>		// for MAC
