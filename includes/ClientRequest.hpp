@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/09 13:13:15 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/09 14:02:57 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,13 +24,15 @@ class ClientRequest {
         std::string         _body;
         std::map<std::string, std::string>  _formData;
         std::map<std::string, std::string>  _headers;
+        std::map<std::string, std::string>  _queryParams;  
+        std::string         _resourcePath;                 
        
 
     public:
     
         ClientRequest();
         ClientRequest( ClientRequest const & other);
-		ClientRequest & operator=( ClientRequest const & other );
+        ClientRequest & operator=( ClientRequest const & other );
         ~ClientRequest();
 
         bool                parse( std::string const & rawRequest);
@@ -44,13 +46,16 @@ class ClientRequest {
         void                parseText();  
         void                testClientRequestParsing();
         void                printRequest();
-
+        void                parseQueryParams();
+        std::string         urlDecode(const std::string& encoded);
 
     // Getters
         std::string         getMethod()         const;
         std::string         getPath()           const;
+        std::string         getResourcePath()   const;
         std::string         getHttpVersion()    const;
         std::string         getBody()           const;
-        std::map<std::string, std::string> getHeaders() const;  
+        std::map<std::string, std::string> getHeaders() const;
+        std::map<std::string, std::string> getQueryParams() const;
         
 };

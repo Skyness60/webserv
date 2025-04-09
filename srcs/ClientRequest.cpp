@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/09 13:23:34 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/09 14:11:54 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,7 +34,13 @@
 // Host: example.com
 // Authorization: Bearer token123              
 
-ClientRequest::ClientRequest() {}
+ClientRequest::ClientRequest() : 
+    _method(""), 
+    _path(""), 
+    _httpVersion(""), 
+    _body(""),
+    _resourcePath("") 
+{}
 
 ClientRequest::~ClientRequest() {}
 
@@ -59,6 +65,8 @@ std::string         ClientRequest::getPath() const { return _path; }
 std::string         ClientRequest::getHttpVersion() const { return _httpVersion; }
 std::string         ClientRequest::getBody() const { return _body; }
 std::map<std::string, std::string> ClientRequest::getHeaders() const { return _headers; }
+std::string ClientRequest::getResourcePath() const { return _resourcePath; }
+std::map<std::string, std::string> ClientRequest::getQueryParams() const { return _queryParams; }
 
 //--------------------------------------------------------------Methods
 
@@ -107,6 +115,9 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
     parseHeaders(request_stream);
     parseBody(request_stream);
     parseContentType();
+    
+    // Parse query parameters from the URL
+    parseQueryParams();
     
     return (true);
 }
@@ -338,6 +349,20 @@ void ClientRequest::printRequest() {
     if (!_body.empty()) {
         std::cout << FYEL("Body: ") << _body << std::endl;
     }
+
+    std::cout << FYEL("Resource Path: ") << _resourcePath << std::endl;
+    
+    if (!_queryParams.empty()) {
+        std::cout << FYEL("Query Parameters:") << std::endl;
+        for (std::map<std::string, std::string>::const_iterator it = _queryParams.begin(); 
+             it != _queryParams.end(); ++it) {
+            std::cout << "  " << it->first;
+            if (!it->second.empty()) {
+                std::cout << " = " << it->second;
+            }
+            std::cout << std::endl;
+        }
+    }
 }
 
 void ClientRequest::testClientRequestParsing() {
@@ -531,5 +556,111 @@ void ClientRequest::testClientRequestParsing() {
     std::cout << "Parsing result: " << (deleteParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
     if (deleteParseSuccess) {
         deleteRequest.printRequest();
+    }
+
+    std::cout << FBLU("\n======== Testing URL Query Parameter Parsing ========\n") << std::endl;
+    std::string testUrlRequest = 
+        "GET /search?q=test%20query&page=2&sort=date&filter=active HTTP/1.1\r\n"
+        "Host: localhost:8080\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n";
+
+    ClientRequest urlRequest;
+    bool urlParseSuccess = urlRequest.parse(testUrlRequest);
+
+    std::cout << "Parsing result: " << (urlParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    if (urlParseSuccess) {
+        urlRequest.printRequest();
+        
+        // Display the parsed query parameters
+        std::cout << FYEL("Decoded Query Parameters:") << std::endl;
+        std::map<std::string, std::string> params = urlRequest.getQueryParams();
+        for (std::map<std::string, std::string>::const_iterator it = params.begin(); 
+             it != params.end(); ++it) {
+            std::cout << "  " << it->first << " = " << it->second << std::endl;
+        }
+    }
+}
+
+// URL decoding function to handle percent-encoded characters
+std::string ClientRequest::urlDecode(const std::string& encoded) {
+    std::string decoded;
+    size_t i = 0;
+    
+    while (i < encoded.length()) {
+        if (encoded[i] == '%' && i + 2 < encoded.length()) {
+            // Handle percent encoding
+            std::string hex = encoded.substr(i + 1, 2);
+            int value;
+            std::istringstream iss(hex);
+            iss >> std::hex >> value;
+            decoded += static_cast<char>(value);
+            i += 3;
+        }
+        else if (encoded[i] == '+') {
+            // "+" in a URL is a space
+            decoded += ' ';
+            i++;
+        }
+        else {
+            decoded += encoded[i];
+            i++;
+        }
+    }
+    
+    return decoded;
+}
+
+// Parse query parameters from the URL
+void ClientRequest::parseQueryParams() {
+    size_t questionPos = _path.find('?');
+    if (questionPos == std::string::npos) {
+        // No query string in the path
+        _resourcePath = _path;
+        return;
+    }
+    
+    // Extract resource path (part before "?")
+    _resourcePath = _path.substr(0, questionPos);
+    
+    // Extract query string (part after "?")
+    std::string queryString = _path.substr(questionPos + 1);
+    
+    // Parse individual query parameters
+    size_t pos = 0;
+    size_t nextPos;
+    
+    while (pos < queryString.length()) {
+        // Find the next delimiter
+        nextPos = queryString.find('&', pos);
+        if (nextPos == std::string::npos) {
+            nextPos = queryString.length();
+        }
+        
+        // Extract the current parameter
+        std::string param = queryString.substr(pos, nextPos - pos);
+        
+        // Find the equals sign
+        size_t equalsPos = param.find('=');
+        if (equalsPos != std::string::npos) {
+            // Extract key and value
+            std::string key = param.substr(0, equalsPos);
+            std::string value = param.substr(equalsPos + 1);
+            
+            // URL decode both key and value
+            key = urlDecode(key);
+            value = urlDecode(value);
+            
+            // Store in the query parameters map
+            _queryParams[key] = value;
+        }
+        else {
+            // Parameter without a value, treat as a flag
+            std::string key = urlDecode(param);
+            _queryParams[key] = "";
+        }
+        
+        // Move to next parameter
+        pos = nextPos + 1;
     }
 }
