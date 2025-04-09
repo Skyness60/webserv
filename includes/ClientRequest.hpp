@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/07 12:19:50 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/09 13:13:15 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,6 +40,8 @@ class ClientRequest {
         void                parseContentType();
         void                parseFormUrlEncoded();
         void                parseMultipartFormData();
+        void                parseJson();
+        void                parseText();  
         void                testClientRequestParsing();
         void                printRequest();
 
