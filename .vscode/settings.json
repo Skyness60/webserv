@@ -76,6 +76,11 @@
 		"locale": "cpp",
 		"mutex": "cpp",
 		"ratio": "cpp",
-		"stack": "cpp"
-	}
+		"stack": "cpp",
+		"charconv": "cpp",
+		"format": "cpp",
+		"text_encoding": "cpp",
+		"variant": "cpp"
+	},
+	"makefile.configureOnOpen": false
 }

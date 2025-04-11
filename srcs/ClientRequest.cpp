@@ -3,36 +3,14 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
+/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/09 14:11:54 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/11 17:10:00 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ClientRequest.hpp"
-
-/*HTTP Request = GET*/ 
-// GET /index.html HTTP/1.1                     <--------- Method line
-// Host: test.com                               <---------- Header line (key : value)
-// User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
-// Accept: text/html,application/xhtml+xml
-// Accept-Language: en-US,en;q=0.9
-// Connection: keep-alive
-//                                              <--------- empty line = end of header
-
-/*HTTP Request = POST*/ 
-// POST /submit-form HTTP/1.1                   <--------- Method line
-// Host: example.com                            <---------- Header line (key : value)
-// Content-Type: application/x-www-form-urlencoded  <---------- format of the data in the body
-// Content-Length: //length of the body in bytes//
-
-// name=John&age=25&email=john@example.com //   <--------- body: The actual data being sent
-
-/*HTTP Request = DELETE*/ 
-// DELETE /users/123 HTTP/1.1                   <--------- resource to delete in the URL path
-// Host: example.com
-// Authorization: Bearer token123              
 
 ClientRequest::ClientRequest() : 
     _method(""), 
@@ -115,50 +93,54 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
     parseHeaders(request_stream);
     parseBody(request_stream);
     parseContentType();
-    
-    // Parse query parameters from the URL
     parseQueryParams();
     
     return (true);
 }
 
-void ClientRequest::parseBody( std::istringstream & request_stream ) {
-
-    // Process non-chunked body (Content-Length)
+void ClientRequest::parseBody(std::istringstream & request_stream) {
+    // Check if the body is chunked or has Content-Length
     if (_headers.find("Content-Length") != _headers.end()) {
-        size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
-        
-        char* body_buffer = new char[content_length + 1];
-        request_stream.read(body_buffer, content_length);
-        body_buffer[content_length] = '\0';
-        _body = std::string(body_buffer, content_length);
-       
-        delete[] body_buffer;
+        parseContentLengthBody(request_stream);
     }
+    else if (_headers.find("Transfer-Encoding") != _headers.end() 
+              && _headers["Transfer-Encoding"] == "chunked") {
+        parseChunkedBody(request_stream);
+    }
+}
 
-    // Process chunked body (Transfer-Encoding)
-    else if (_headers.find("Transfer-Encoding") != _headers.end() && _headers["Transfer-Encoding"] == "chunked") {
-        std::string decoded;
-        std::string line;
+void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
+    size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
+    
+    char* body_buffer = new char[content_length + 1];
+    request_stream.read(body_buffer, content_length);
+    body_buffer[content_length] = '\0';
+    _body = std::string(body_buffer, content_length);
+    
+    delete[] body_buffer;
+}
+
+void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
+    std::string decoded;
+    std::string line;
+    
+    while (std::getline(request_stream, line)) {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+            
+        size_t chunk_size = strtoul(line.c_str(), NULL, 16);
+        if (chunk_size == 0)
+            break;
+            
+        char* buffer = new char[chunk_size];
+        request_stream.read(buffer, chunk_size);
+        decoded.append(buffer, chunk_size);
         
-        while (std::getline(request_stream, line)) {
-            if (!line.empty() && line[line.size() - 1] == '\r')
-                line.erase(line.size() - 1);
-                
-            size_t chunk_size = strtoul(line.c_str(), NULL, 16);
-            if (chunk_size == 0)
-                break;
-                
-            char* buffer = new char[chunk_size];
-            request_stream.read(buffer, chunk_size);
-            decoded.append(buffer, chunk_size);
-            
-            delete[] buffer;
-            
-            std::getline(request_stream, line);
-        }
-        _body = decoded;
+        delete[] buffer;
+        
+        std::getline(request_stream, line);
     }
+    _body = decoded;
 }
 
 void ClientRequest::parseContentType() {
@@ -182,76 +164,76 @@ void ClientRequest::parseContentType() {
 }
 
 void ClientRequest::parseJson() {
-        
     std::map<std::string, std::string> jsonData;
     std::string jsonStr = _body;
-            
+    
     size_t start = jsonStr.find('{');
     size_t end = jsonStr.rfind('}');
-            
+    
     if (start != std::string::npos && end != std::string::npos && start < end) {
         jsonStr = jsonStr.substr(start + 1, end - start - 1);
-        bool insideQuotes = false;
-        std::string currentKey;
-        std::string currentValue;
-        bool processingKey = true;
-                
-        for (size_t i = 0; i < jsonStr.length(); i++) {
-            char c = jsonStr[i];
-            if (c == '"' && (i == 0 || jsonStr[i-1] != '\\')) {
-                insideQuotes = !insideQuotes;
-                continue;
-            }
-                    
-            if (!insideQuotes) {
-                if (isspace(c)) {
-                    continue;
-                }
-                        
-                if (c == ':' && processingKey) {
-                    processingKey = false;
-                    continue;
-                }
-                        
-                if (c == ',') {
-                    if (!currentKey.empty()) {
-                        jsonData[currentKey] = currentValue; 
-                        currentKey.clear();
-                        currentValue.clear();
-                    }
-                    processingKey = true;
-                    continue;
-                }
-            }
-            
-            if (processingKey) {
-                if (c != '"') {
-                    currentKey += c;
-                }
-            }
-            else {
-                currentValue += c;
-            }
-        }
-        
-        if (!currentKey.empty()) {
-            jsonData[currentKey] = currentValue;
-        }
-        
-        for (std::map<std::string, std::string>::iterator it = jsonData.begin(); it != jsonData.end(); ++it) {
-            std::string& value = it->second;
-            value = value.substr(value.find_first_not_of(" \t\""));
-            size_t end = value.find_last_not_of(" \t\"");
-            if (end != std::string::npos) {
-                value = value.substr(0, end + 1);
-            }
-        }
+        parseJsonContent(jsonStr, jsonData);
         _formData = jsonData;
     }
 }
+
+void ClientRequest::parseJsonContent( const std::string & jsonContent, std::map<std::string, std::string>& jsonData ) {
+    bool insideQuotes = false;
+    std::string currentKey;
+    std::string currentValue;
+    bool processingKey = true;
     
+    for (size_t i = 0; i < jsonContent.length(); i++) {
+        char c = jsonContent[i];
+        if (c == '"' && (i == 0 || jsonContent[i-1] != '\\')) {
+            insideQuotes = !insideQuotes;
+            continue;
+        }
+        if (!insideQuotes) {
+            if (isspace(c)) {
+                continue;
+            }
+            if (c == ':' && processingKey) {
+                processingKey = false;
+                continue;
+            }
+            if (c == ',') {
+                if (!currentKey.empty()) {
+                    jsonData[currentKey] = currentValue;
+                    currentKey.clear();
+                    currentValue.clear();
+                }
+                processingKey = true;
+                continue;
+            }
+        }
+        if (processingKey) {
+            if (c != '"') {
+                currentKey += c;
+            }
+        }
+        else {
+            currentValue += c;
+        }
+    }
+    if (!currentKey.empty()) { // Handle the last key-value pair
+        jsonData[currentKey] = currentValue;
+    }
+    cleanupJsonValues(jsonData);
+}
+
+void ClientRequest::cleanupJsonValues( std::map<std::string, std::string>& jsonData ) {
+    for (std::map<std::string, std::string>::iterator it = jsonData.begin(); it != jsonData.end(); ++it) {
+        std::string& value = it->second;
+        value = value.substr(value.find_first_not_of(" \t\""));
+        size_t end = value.find_last_not_of(" \t\"");
+        if (end != std::string::npos) {
+            value = value.substr(0, end + 1);
+        }
+    }
+}
+
 void ClientRequest::parseText() {
-    
     std::string text = _body;
     std::istringstream stream(text);
     std::string line;
@@ -275,85 +257,202 @@ void ClientRequest::parseText() {
     
 
 void ClientRequest::parseFormUrlEncoded() {
-    
     std::map<std::string, std::string> formData;
-    std::string key;
-    std::string value;
-    std::istringstream stream(_body);
+    std::string body = _body;
+    std::vector<std::string> pairs = splitFormData(body);// Split by '&' to get key-value pairs
     
-    while (std::getline(stream, key, '=') && std::getline(stream, value, '&')) {
-        formData[key] = value;
+    for (size_t i = 0; i < pairs.size(); i++) {
+        processFormDataPair(pairs[i], formData);
     }
     _formData = formData;
+    // std::cout << FYEL("_formData: ") << std::endl;
+    // for (std::map<std::string, std::string>::const_iterator it = _formData.begin(); it != _formData.end(); ++it) {
+    //     std::cout << "  " << it->first << ": " << it->second << std::endl;
+    // }
+}
+
+std::vector<std::string> ClientRequest::splitFormData( const std::string & data ) {
+    std::vector<std::string> result;
+    size_t start = 0;
+    size_t end = 0;
+    
+    while ((end = data.find('&', start)) != std::string::npos) {
+        result.push_back(data.substr(start, end - start));
+        start = end + 1;
+    }
+    if (start < data.length()) {// Add the last part
+        result.push_back(data.substr(start));
+    }
+    
+    return result;
+}
+
+void ClientRequest::processFormDataPair(const std::string& pair, std::map<std::string, std::string>& formData) {
+    size_t equalPos = pair.find('=');
+    
+    if (equalPos != std::string::npos) {
+        std::string key = pair.substr(0, equalPos);
+        std::string value = pair.substr(equalPos + 1);
+        key = urlDecode(key);// URL decode key and value
+        value = urlDecode(value);
+        formData[key] = value;
+    }
+    else if (!pair.empty()) {// Handle case where there's a key but no value
+        formData[urlDecode(pair)] = "";
+    }
 }
 
 void ClientRequest::parseMultipartFormData() {
-
     std::string contentType = _headers["Content-Type"];
+    std::string boundary = extractBoundary(contentType);
+    if (boundary.empty()) {
+        return;
+    }
+    processMultipartParts(boundary);
+}
+
+std::string ClientRequest::extractBoundary(const std::string& contentType) {
     std::string boundaryPrefix = "boundary=";
     size_t boundaryPos = contentType.find(boundaryPrefix);
-    if (boundaryPos == std::string::npos)
-        return;
-    std::string boundary = "--" + contentType.substr(boundaryPos + boundaryPrefix.length());
     
-    size_t i = 0;
+    if (boundaryPos == std::string::npos) {
+        return "";
+    }
+    return ("--" + contentType.substr(boundaryPos + boundaryPrefix.length()));
+}
+
+void ClientRequest::processMultipartParts(const std::string& boundary) {
+    size_t position = 0;
+    
     while (true) {
-        
-        size_t start = _body.find(boundary, i);
-        if (start == std::string::npos)
+        size_t partStart = _body.find(boundary, position);
+        if (partStart == std::string::npos) {
             break;
-        start += boundary.length();
-        if (_body.substr(start, 2) == "--")
-            break;
-        if (_body.substr(start, 2) == "\r\n")
-            start += 2;
-        size_t end = _body.find(boundary, start);
-        if (end == std::string::npos)
-            break;
-        
-        std::string part = _body.substr(start, end - start);
-        
-        size_t headerEnd = part.find("\r\n\r\n");
-        if (headerEnd != std::string::npos) {
-            std::string headersPart = part.substr(0, headerEnd);
-            std::string content = part.substr(headerEnd + 4);
-            
-            size_t dispositionPos = headersPart.find("Content-Disposition:");
-            if (dispositionPos != std::string::npos) {
-                size_t namePos = headersPart.find("name=", dispositionPos);
-                if (namePos != std::string::npos) {
-                    namePos += 6;
-                    size_t quoteEnd = headersPart.find("\"", namePos);
-                    if (quoteEnd != std::string::npos) {
-                        std::string fieldName = headersPart.substr(namePos, quoteEnd - namePos);
-                        _formData[fieldName] = content;
-                    }
-                }
-            }
         }
-        i = end;
+        partStart += boundary.length();
+        if (_body.substr(partStart, 2) == "--") {
+            break; // End boundary marker
+        }
+        if (_body.substr(partStart, 2) == "\r\n") {
+            partStart += 2;
+        }
+        size_t partEnd = _body.find(boundary, partStart);
+        if (partEnd == std::string::npos) {
+            break;
+        }
+        std::string part = _body.substr(partStart, partEnd - partStart);
+        parseMultipartPart(part);
+        position = partEnd;
+    }
+}
+
+void ClientRequest::parseMultipartPart( const std::string& part ) {
+    size_t headerEnd = part.find("\r\n\r\n");
+    if (headerEnd == std::string::npos) {
+        return;
+    }
+    std::string headers = part.substr(0, headerEnd);
+    std::string content = part.substr(headerEnd + 4);
+    std::string fieldName = extractFieldName(headers);
+    if (!fieldName.empty()) {
+        _formData[fieldName] = content;
+    }
+}
+
+std::string ClientRequest::extractFieldName(const std::string& headers) {
+    size_t dispositionPos = headers.find("Content-Disposition:");
+    if (dispositionPos == std::string::npos) {
+        return "";
+    }
+    size_t namePos = headers.find("name=", dispositionPos);
+    if (namePos == std::string::npos) {
+        return "";
+    }
+    namePos += 6; // Skip "name=\""
+    size_t quoteEnd = headers.find("\"", namePos);
+    if (quoteEnd == std::string::npos) {
+        return "";
+    }
+    return headers.substr(namePos, quoteEnd - namePos);
+}
+
+std::string ClientRequest::urlDecode(const std::string& encoded) {
+    std::string decoded;
+    size_t i = 0;
+    
+    while (i < encoded.length()) {
+        if (encoded[i] == '%' && i + 2 < encoded.length()) {
+            std::string hex = encoded.substr(i + 1, 2);
+            int value;
+            std::istringstream iss(hex);
+            iss >> std::hex >> value;
+            decoded += static_cast<char>(value);
+            i += 3;
+        }
+        else if (encoded[i] == '+') {
+            decoded += ' ';
+            i++;
+        }
+        else {
+            decoded += encoded[i];
+            i++;
+        }
+    }
+    return (decoded);
+}
+
+void ClientRequest::parseQueryParams() {
+    size_t questionPos = _path.find('?');
+    if (questionPos == std::string::npos) {
+        _resourcePath = _path;
+        return;
+    }
+    _resourcePath = _path.substr(0, questionPos);
+    std::string queryString = _path.substr(questionPos + 1);
+    size_t pos = 0;
+    size_t nextPos;
+    
+    while (pos < queryString.length()) {
+        nextPos = queryString.find('&', pos);
+        if (nextPos == std::string::npos) {
+            nextPos = queryString.length();
+        }
+        std::string param = queryString.substr(pos, nextPos - pos);
+        size_t equalsPos = param.find('=');
+        if (equalsPos != std::string::npos) {
+            std::string key = param.substr(0, equalsPos);
+            std::string value = param.substr(equalsPos + 1);
+            key = urlDecode(key);
+            value = urlDecode(value);
+            _queryParams[key] = value;
+        }
+        else {
+            std::string key = urlDecode(param);
+            _queryParams[key] = "";
+        }
+        pos = nextPos + 1;
     }
 }
 
 void ClientRequest::printRequest() {
     
-    std::cout << FYEL("Method: ") << _method << std::endl;
-    std::cout << FYEL("Path: ") << _path << std::endl;
-    std::cout << FYEL("HTTP Version: ") << _httpVersion << std::endl;
-    std::cout << FYEL("Headers:") << std::endl;
+    std::cout << FYEL("_method: ") << _method << std::endl;
+    std::cout << FYEL("_path: ") << _path << std::endl;
+    std::cout << FYEL("_httpVersion: ") << _httpVersion << std::endl;
+    std::cout << FYEL("_headers:") << std::endl;
         
     for (std::map<std::string, std::string>::const_iterator it = _headers.begin(); it != _headers.end(); ++it) {
         std::cout << "  " << it->first << ": " << it->second << std::endl;
     }
         
     if (!_body.empty()) {
-        std::cout << FYEL("Body: ") << _body << std::endl;
+        std::cout << FYEL("_body: ") << _body << std::endl;
     }
-
-    std::cout << FYEL("Resource Path: ") << _resourcePath << std::endl;
+    
+    std::cout << FYEL("_resourcePath: ") << _resourcePath << std::endl;
     
     if (!_queryParams.empty()) {
-        std::cout << FYEL("Query Parameters:") << std::endl;
+        std::cout << FYEL("_queryParams:") << std::endl;
         for (std::map<std::string, std::string>::const_iterator it = _queryParams.begin(); 
              it != _queryParams.end(); ++it) {
             std::cout << "  " << it->first;
@@ -367,29 +466,29 @@ void ClientRequest::printRequest() {
 
 void ClientRequest::testClientRequestParsing() {
 
-    std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
-    std::string testRequest = 
-        "GET /index.html HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "User-Agent: Mozilla/5.0\r\n"
-        "Accept: text/html,application/xhtml+xml\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n";
+    // std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
+    // std::string testRequest = 
+    //     "GET /index.html HTTP/1.1\r\n"
+    //     "Host: localhost:8080\r\n"
+    //     "User-Agent: Mozilla/5.0\r\n"
+    //     "Accept: text/html,application/xhtml+xml\r\n"
+    //     "Connection: keep-alive\r\n"
+    //     "\r\n";
     
-    ClientRequest request;
-    bool parseSuccess = request.parse(testRequest);
+    // ClientRequest request;
+    // bool parseSuccess = request.parse(testRequest);
     
-    std::cout << "Parsing result: " << (parseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (parseSuccess) {
-        request.printRequest();
-    }
+    // std::cout << "Parsing result: " << (parseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    // if (parseSuccess) {
+    //     request.printRequest();
+    // }
     
     std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
     std::string testPostRequest = 
         "POST /submit-form HTTP/1.1\r\n"
         "Host: localhost:8080\r\n"
         "Content-Type: application/x-www-form-urlencoded\r\n"
-        "Content-Length: 27\r\n"
+        "Content-Length: 29\r\n"
         "\r\n"
         "username=john&password=secret";
     
@@ -400,267 +499,133 @@ void ClientRequest::testClientRequestParsing() {
     std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
     if (postParseSuccess) {
         postRequest.printRequest();
-    }
-
-    std::cout << FBLU("\n======== Testing Form URL Encoded Parsing ========\n") << std::endl;
-    std::string testFormUrlEncodedRequest = 
-        "POST /submit-form HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: application/x-www-form-urlencoded\r\n"
-        "Content-Length: 44\r\n"
-        "\r\n"
-        "username=johndoe&email=john@example.com&age=30";
-
-    ClientRequest formUrlEncodedRequest;
-    bool formUrlEncodedParseSuccess = formUrlEncodedRequest.parse(testFormUrlEncodedRequest);
-
-    std::cout << "Parsing result: " << (formUrlEncodedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (formUrlEncodedParseSuccess) {
-        formUrlEncodedRequest.printRequest();
-
-        std::cout << FYEL("Parsed Form URL Encoded data:") << std::endl;
-        std::map<std::string, std::string> formData = formUrlEncodedRequest._formData;
+        
+        std::cout << FYEL("_formData:") << std::endl;
+        std::map<std::string, std::string> formData = postRequest._formData;
         for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
             it != formData.end(); ++it) {
             std::cout << "  " << it->first << ": " << it->second << std::endl;
         }
     }
 
-    std::cout << FBLU("\n======== Testing Multipart Form Data Parsing ========\n") << std::endl;
-        std::string boundary = "----WebKitFormBoundaryX7YA15VlAH";
-        std::string multipartBody = 
-            "--" + boundary + "\r\n" +
-            "Content-Disposition: form-data; name=\"username\"\r\n" +
-            "\r\n" +
-            "janedoe\r\n" +
-            "--" + boundary + "\r\n" +
-            "Content-Disposition: form-data; name=\"email\"\r\n" +
-            "\r\n" +
-            "jane@example.com\r\n" +
-            "--" + boundary + "\r\n" +
-            "Content-Disposition: form-data; name=\"age\"\r\n" +
-            "\r\n" +
-            "28\r\n" +
-            "--" + boundary + "--\r\n";
+    // std::cout << FBLU("\n======== Testing Form URL Encoded Parsing ========\n") << std::endl;
+    // std::string testFormUrlEncodedRequest = 
+    //     "POST /submit-form HTTP/1.1\r\n"
+    //     "Host: localhost:8080\r\n"
+    //     "Content-Type: application/x-www-form-urlencoded\r\n"
+    //     "Content-Length: 46\r\n"
+    //     "\r\n"
+    //     "username=johndoe&email=john@example.com&age=30";
 
-        std::string testMultipartRequest = 
-            "POST /upload HTTP/1.1\r\n"
-            "Host: localhost:8080\r\n"
-            "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n"
-            "Content-Length: " + static_cast<std::ostringstream*>(&(std::ostringstream() << multipartBody.length()))->str() + "\r\n"
-            "\r\n" +
-            multipartBody;
+    // ClientRequest formUrlEncodedRequest;
+    // bool formUrlEncodedParseSuccess = formUrlEncodedRequest.parse(testFormUrlEncodedRequest);
 
-    ClientRequest multipartRequest;
-    bool multipartParseSuccess = multipartRequest.parse(testMultipartRequest);
+    // std::cout << "Parsing result: " << (formUrlEncodedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    // if (formUrlEncodedParseSuccess) {
+    //     formUrlEncodedRequest.printRequest();
 
-    std::cout << "Parsing result: " << (multipartParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (multipartParseSuccess) {
-        multipartRequest.printRequest();
+    //     std::cout << FYEL("_formData:") << std::endl;
+    //     std::map<std::string, std::string> formData = formUrlEncodedRequest._formData;
+    //     for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
+    //         it != formData.end(); ++it) {
+    //         std::cout << "  " << it->first << ": " << it->second << std::endl;
+    //     }
+    // }
+
+//     std::cout << FBLU("\n======== Testing JSON Parsing ========\n") << std::endl;
+//     std::string testJsonRequest = 
+//         "POST /api/data HTTP/1.1\r\n"
+//         "Host: localhost:8080\r\n"
+//         "Content-Type: application/json\r\n"
+//         "Content-Length: 59\r\n"
+//         "\r\n"
+//         "{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"age\":\"30\"}";
+    
+//     ClientRequest jsonRequest;
+//     bool jsonParseSuccess = jsonRequest.parse(testJsonRequest);
+    
+//     std::cout << "Parsing result: " << (jsonParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+//     if (jsonParseSuccess) {
+//         jsonRequest.printRequest();
         
-        // Display the parsed form data
-        std::cout << FYEL("Parsed Multipart Form data:") << std::endl;
-        std::map<std::string, std::string> formData = multipartRequest._formData;
-        for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-            it != formData.end(); ++it) {
-            std::cout << "  " << it->first << ": " << it->second << std::endl;
-        }
-    }
-
-    std::cout << FBLU("\n======== Testing JSON Parsing ========\n") << std::endl;
-    std::string testJsonRequest = 
-        "POST /api/data HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: 59\r\n"
-        "\r\n"
-        "{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"age\":\"30\"}";
+//         std::cout << FYEL("Parsed JSON data:") << std::endl;
+//         std::map<std::string, std::string> formData = jsonRequest._formData;
+//         for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
+//              it != formData.end(); ++it) {
+//             std::cout << "  " << it->first << ": " << it->second << std::endl;
+//         }
+//     }
     
-    ClientRequest jsonRequest;
-    bool jsonParseSuccess = jsonRequest.parse(testJsonRequest);
+//     std::cout << FBLU("\n======== Testing Text Parsing ========\n") << std::endl;
+//     std::string testTextRequest = 
+//         "POST /api/text HTTP/1.1\r\n"
+//         "Host: localhost:8080\r\n"
+//         "Content-Type: text/plain\r\n"
+//         "Content-Length: 46\r\n"
+//         "\r\n"
+//         "name=Jane Doe\r\nemail=jane@example.com\r\nage=28";
     
-    std::cout << "Parsing result: " << (jsonParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (jsonParseSuccess) {
-        jsonRequest.printRequest();
-        
-        // Display the parsed form data
-        std::cout << FYEL("Parsed JSON data:") << std::endl;
-        std::map<std::string, std::string> formData = jsonRequest._formData;
-        for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-             it != formData.end(); ++it) {
-            std::cout << "  " << it->first << ": " << it->second << std::endl;
-        }
-    }
+//     ClientRequest textRequest;
+//     bool textParseSuccess = textRequest.parse(testTextRequest);
     
-    // Test for Text parsing
-    std::cout << FBLU("\n======== Testing Text Parsing ========\n") << std::endl;
-    std::string testTextRequest = 
-        "POST /api/text HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 46\r\n"
-        "\r\n"
-        "name=Jane Doe\r\nemail=jane@example.com\r\nage=28";
-    
-    ClientRequest textRequest;
-    bool textParseSuccess = textRequest.parse(testTextRequest);
-    
-    std::cout << "Parsing result: " << (textParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (textParseSuccess) {
-        textRequest.printRequest();
-        
-        // Display the parsed form data
-        std::cout << FYEL("Parsed Text data:") << std::endl;
-        std::map<std::string, std::string> formData = textRequest._formData;
-        for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-             it != formData.end(); ++it) {
-            std::cout << "  " << it->first << ": " << it->second << std::endl;
-        }
-    }
+//     std::cout << "Parsing result: " << (textParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+//     if (textParseSuccess) {
+//         textRequest.printRequest();
+//     }
     
 
-    std::cout << FBLU("\n======== Testing POST CHUNCKED Method ========\n") << std::endl;
-    std::string testChunkedRequest = 
-    "POST /chunked HTTP/1.1\r\n"
-    "Host: localhost:8080\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Content-Type: text/plain\r\n"
-    "\r\n"
-    "7\r\n"
-    "Mozilla\r\n"
-    "9\r\n"
-    "Developer\r\n"
-    "7\r\n"
-    "Network\r\n"
-    "0\r\n"
-    "\r\n";
+//     std::cout << FBLU("\n======== Testing POST CHUNCKED Method ========\n") << std::endl;
+//     std::string testChunkedRequest = 
+//     "POST /chunked HTTP/1.1\r\n"
+//     "Host: localhost:8080\r\n"
+//     "Transfer-Encoding: chunked\r\n"
+//     "Content-Type: text/plain\r\n"
+//     "\r\n"
+//     "7\r\n"
+//     "Mozilla\r\n"
+//     "9\r\n"
+//     "Developer\r\n"
+//     "7\r\n"
+//     "Network\r\n"
+//     "0\r\n"
+//     "\r\n";
 
-    ClientRequest chunkedRequest;
-    bool chunkedParseSuccess = chunkedRequest.parse(testChunkedRequest);
+//     ClientRequest chunkedRequest;
+//     bool chunkedParseSuccess = chunkedRequest.parse(testChunkedRequest);
 
-    std::cout << "Parsing result: " << (chunkedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (chunkedParseSuccess) {
-        chunkedRequest.printRequest();
-    }
+//     std::cout << "Parsing result: " << (chunkedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+//     if (chunkedParseSuccess) {
+//         chunkedRequest.printRequest();
+//     }
     
-    std::cout << FBLU("\n======== Testing DELETE Method ========\n") << std::endl;
-    std::string testDeleteRequest = 
-        "DELETE /users/123 HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Authorization: Bearer token123\r\n"
-        "\r\n";
+//     std::cout << FBLU("\n======== Testing DELETE Method ========\n") << std::endl;
+//     std::string testDeleteRequest = 
+//         "DELETE /users/123 HTTP/1.1\r\n"
+//         "Host: localhost:8080\r\n"
+//         "Authorization: Bearer token123\r\n"
+//         "\r\n";
     
-    ClientRequest deleteRequest;
-    bool deleteParseSuccess = deleteRequest.parse(testDeleteRequest);
+//     ClientRequest deleteRequest;
+//     bool deleteParseSuccess = deleteRequest.parse(testDeleteRequest);
     
-    std::cout << "Parsing result: " << (deleteParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (deleteParseSuccess) {
-        deleteRequest.printRequest();
-    }
+//     std::cout << "Parsing result: " << (deleteParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+//     if (deleteParseSuccess) {
+//         deleteRequest.printRequest();
+//     }
 
-    std::cout << FBLU("\n======== Testing URL Query Parameter Parsing ========\n") << std::endl;
-    std::string testUrlRequest = 
-        "GET /search?q=test%20query&page=2&sort=date&filter=active HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n";
+    // std::cout << FBLU("\n======== Testing URL Query Parameter Parsing ========\n") << std::endl;
+    // std::string testUrlRequest = 
+    //     "GET /search?q=test%20query&page=2&sort=date&filter=active HTTP/1.1\r\n"
+    //     "Host: localhost:8080\r\n"
+    //     "Connection: keep-alive\r\n"
+    //     "\r\n";
 
-    ClientRequest urlRequest;
-    bool urlParseSuccess = urlRequest.parse(testUrlRequest);
+    // ClientRequest urlRequest;
+    // bool urlParseSuccess = urlRequest.parse(testUrlRequest);
 
-    std::cout << "Parsing result: " << (urlParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (urlParseSuccess) {
-        urlRequest.printRequest();
-        
-        // Display the parsed query parameters
-        std::cout << FYEL("Decoded Query Parameters:") << std::endl;
-        std::map<std::string, std::string> params = urlRequest.getQueryParams();
-        for (std::map<std::string, std::string>::const_iterator it = params.begin(); 
-             it != params.end(); ++it) {
-            std::cout << "  " << it->first << " = " << it->second << std::endl;
-        }
-    }
+    // std::cout << "Parsing result: " << (urlParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    // if (urlParseSuccess) {
+    //     urlRequest.printRequest();
+    // }
 }
 
-// URL decoding function to handle percent-encoded characters
-std::string ClientRequest::urlDecode(const std::string& encoded) {
-    std::string decoded;
-    size_t i = 0;
-    
-    while (i < encoded.length()) {
-        if (encoded[i] == '%' && i + 2 < encoded.length()) {
-            // Handle percent encoding
-            std::string hex = encoded.substr(i + 1, 2);
-            int value;
-            std::istringstream iss(hex);
-            iss >> std::hex >> value;
-            decoded += static_cast<char>(value);
-            i += 3;
-        }
-        else if (encoded[i] == '+') {
-            // "+" in a URL is a space
-            decoded += ' ';
-            i++;
-        }
-        else {
-            decoded += encoded[i];
-            i++;
-        }
-    }
-    
-    return decoded;
-}
-
-// Parse query parameters from the URL
-void ClientRequest::parseQueryParams() {
-    size_t questionPos = _path.find('?');
-    if (questionPos == std::string::npos) {
-        // No query string in the path
-        _resourcePath = _path;
-        return;
-    }
-    
-    // Extract resource path (part before "?")
-    _resourcePath = _path.substr(0, questionPos);
-    
-    // Extract query string (part after "?")
-    std::string queryString = _path.substr(questionPos + 1);
-    
-    // Parse individual query parameters
-    size_t pos = 0;
-    size_t nextPos;
-    
-    while (pos < queryString.length()) {
-        // Find the next delimiter
-        nextPos = queryString.find('&', pos);
-        if (nextPos == std::string::npos) {
-            nextPos = queryString.length();
-        }
-        
-        // Extract the current parameter
-        std::string param = queryString.substr(pos, nextPos - pos);
-        
-        // Find the equals sign
-        size_t equalsPos = param.find('=');
-        if (equalsPos != std::string::npos) {
-            // Extract key and value
-            std::string key = param.substr(0, equalsPos);
-            std::string value = param.substr(equalsPos + 1);
-            
-            // URL decode both key and value
-            key = urlDecode(key);
-            value = urlDecode(value);
-            
-            // Store in the query parameters map
-            _queryParams[key] = value;
-        }
-        else {
-            // Parameter without a value, treat as a flag
-            std::string key = urlDecode(param);
-            _queryParams[key] = "";
-        }
-        
-        // Move to next parameter
-        pos = nextPos + 1;
-    }
-}

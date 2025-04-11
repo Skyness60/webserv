@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
+/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/09 14:02:57 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/11 15:32:55 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,10 +39,20 @@ class ClientRequest {
         bool                parseMethod( std::istringstream & stream );
         void                parseHeaders( std::istringstream & stream );
         void                parseBody( std::istringstream & request_stream );
+        void                parseContentLengthBody( std::istringstream & request_stream );
+        void                parseChunkedBody( std::istringstream & request_stream );
         void                parseContentType();
         void                parseFormUrlEncoded();
+        std::vector<std::string> splitFormData(const std::string& data);
+        void                processFormDataPair( const std::string & pair, std::map<std::string, std::string> & formData );
         void                parseMultipartFormData();
+        void                processMultipartParts( const std::string & boundary );
+        std::string         extractFieldName( const std::string & headers );
+        void                parseMultipartPart( const std::string& part ) ;
+        std::string         extractBoundary( const std::string & contentType );
         void                parseJson();
+        void                parseJsonContent( const std::string& jsonContent, std::map<std::string, std::string>& jsonData);
+        void                cleanupJsonValues( std::map<std::string, std::string>& jsonData );
         void                parseText();  
         void                testClientRequestParsing();
         void                printRequest();
