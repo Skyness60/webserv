@@ -48,79 +48,110 @@ void ServerManager::startServer() {
     std::vector<int> server_fds;
     std::vector<struct sockaddr_in> addresses;
 
-    // Create a socket and bind it for each server configuration
+    // Create and configure server sockets
     for (int i = 0; i < getServersCount(); ++i) {
-        int server_fd;
-        struct sockaddr_in address;
-        int opt = 1;
-
-        std::string listenValue;
-        try {
-            listenValue = getConfigValue(i, "listen");
-        } catch (const std::exception &e) {
-            std::cerr << "Error: Missing 'listen' configuration for server " << i << ". Skipping this server." << std::endl;
-            continue;
+        int server_fd = createAndBindSocket(i);
+        if (server_fd != -1) {
+            server_fds.push_back(server_fd);
+            struct sockaddr_in address = getServerAddress(i);
+            addresses.push_back(address);
         }
-
-        int port = std::atoi(listenValue.c_str());
-        if (port <= 0 || port > 65535) {
-            std::cerr << "Error: Invalid 'listen' value for server " << i << ": " << listenValue << ". Skipping this server." << std::endl;
-            continue;
-        }
-
-        server_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_fd == -1) {
-            std::cerr << "Error: Could not create socket for server " << i << ". Skipping this server." << std::endl;
-            continue;
-        }
-
-        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1) {
-            std::cerr << "Error: Could not set socket options for server " << i << ". Skipping this server." << std::endl;
-            close(server_fd);
-            continue;
-        }
-
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(static_cast<uint16_t>(port));
-
-        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1) {
-            std::cerr << "Error: Could not bind socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
-            close(server_fd);
-            continue;
-        }
-
-        if (listen(server_fd, 10) == -1) {
-            std::cerr << "Error: Could not listen on socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
-            close(server_fd);
-            continue;
-        }
-
-        std::cout << "Server " << i << " listening on port " << port << std::endl;
-
-        server_fds.push_back(server_fd);
-        addresses.push_back(address);
     }
 
-    // Create epoll instance
+    int epoll_fd = setupEpollInstance(server_fds);
+    if (epoll_fd == -1)
+        return;
+
+    eventLoop(epoll_fd, server_fds);
+
+    cleanup(epoll_fd, server_fds);
+}
+
+int ServerManager::createAndBindSocket(int serverIndex) {
+    int server_fd;
+    struct sockaddr_in address;
+    int opt = 1;
+
+    std::string listenValue;
+    try {
+        listenValue = getConfigValue(serverIndex, "listen");
+    } catch (const std::exception &e) {
+        std::cerr << "Error: Missing 'listen' configuration for server " << serverIndex << ". Skipping this server." << std::endl;
+        return -1;
+    }
+
+    int port = std::atoi(listenValue.c_str());
+    if (port <= 0 || port > 65535) {
+        std::cerr << "Error: Invalid 'listen' value for server " << serverIndex << ": " << listenValue << ". Skipping this server." << std::endl;
+        return -1;
+    }
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1) {
+        std::cerr << "Error: Could not create socket for server " << serverIndex << ". Skipping this server." << std::endl;
+        return -1;
+    }
+
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1) {
+        std::cerr << "Error: Could not set socket options for server " << serverIndex << ". Skipping this server." << std::endl;
+        close(server_fd);
+        return -1;
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(static_cast<uint16_t>(port));
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1) {
+        std::cerr << "Error: Could not bind socket for server " << serverIndex << " on port " << port << ". Skipping this server." << std::endl;
+        close(server_fd);
+        return -1;
+    }
+
+    if (listen(server_fd, 10) == -1) {
+        std::cerr << "Error: Could not listen on socket for server " << serverIndex << " on port " << port << ". Skipping this server." << std::endl;
+        close(server_fd);
+        return -1;
+    }
+
+    std::cout << "Server " << serverIndex << " listening on port " << port << std::endl;
+    return server_fd;
+}
+
+struct sockaddr_in ServerManager::getServerAddress(int serverIndex) {
+    struct sockaddr_in address;
+	std::string listenValue = getConfigValue(serverIndex, "listen");
+	int port = std::atoi(listenValue.c_str());
+
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_port = htons(static_cast<uint16_t>(port));
+
+	std::cout << "Server " << serverIndex << " address: " << inet_ntoa(address.sin_addr) << ":" << port << std::endl;
+	return address;
+}
+
+int ServerManager::setupEpollInstance(const std::vector<int> &server_fds) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         perror("epoll_create1");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
-    // Add server sockets to epoll
-    for (size_t i = 0; i < server_fds.size(); ++i) {
+    for (std::vector<int>::const_iterator it = server_fds.begin(); it != server_fds.end(); ++it) {
         struct epoll_event event;
-        event.events = EPOLLIN; // Ready to read
-        event.data.fd = server_fds[i];
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fds[i], &event) == -1) {
+        event.events = EPOLLIN;
+        event.data.fd = *it;
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, *it, &event) == -1) {
             perror("epoll_ctl");
-            exit(EXIT_FAILURE);
+            close(epoll_fd);
+            return -1;
         }
     }
+    return epoll_fd;
+}
 
-    // Event loop
+void ServerManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds) {
     const int MAX_EVENTS = 10;
     struct epoll_event events[MAX_EVENTS];
 
@@ -128,64 +159,139 @@ void ServerManager::startServer() {
         int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         if (num_events == -1) {
             perror("epoll_wait");
-            exit(EXIT_FAILURE);
+            break;
         }
 
         for (int i = 0; i < num_events; ++i) {
             int event_fd = events[i].data.fd;
 
-            // Check if it's a server socket (new connection)
             if (std::find(server_fds.begin(), server_fds.end(), event_fd) != server_fds.end()) {
-                struct sockaddr_in client_address;
-                socklen_t client_len = sizeof(client_address);
-                int client_fd = accept(event_fd, (struct sockaddr *)&client_address, &client_len);
-                if (client_fd == -1) {
-                    perror("accept");
-                    continue;
-                }
-
-                // Set client socket to non-blocking
-                fcntl(client_fd, F_SETFL, O_NONBLOCK);
-
-                // Add client socket to epoll
-                struct epoll_event client_event;
-                client_event.events = EPOLLIN | EPOLLET; // Edge-triggered
-                client_event.data.fd = client_fd;
-                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
-                    perror("epoll_ctl");
-                    close(client_fd);
-                    continue;
-                }
-
-                std::cout << "New client connected: " << client_fd << std::endl;
+                handleNewConnection(epoll_fd, event_fd);
             } else {
-                // Handle client request
-                char buffer[1024] = {0};
-                int valread = read(event_fd, buffer, sizeof(buffer));
-                if (valread <= 0) {
-                    // Client disconnected
-                    std::cout << "Client disconnected: " << event_fd << std::endl;
-                    close(event_fd);
-                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, event_fd, NULL);
-                } else {
-                    // Process request
-                    std::string rawRequest(buffer, valread);
-                    ClientRequest request;
-                    if (request.parse(rawRequest)) {
-                        Response response(event_fd, request.getPath(), request.getMethod(), _config, request.getHeaders(), 0);
-                        response.oriente();
-                    } else {
-                        std::cerr << "Failed to parse request from client: " << event_fd << std::endl;
-                    }
-                }
+                handleClientRequest(epoll_fd, event_fd);
             }
         }
     }
+}
 
-    // Cleanup
+void ServerManager::handleNewConnection(int epoll_fd, int server_fd) {
+    struct sockaddr_in client_address;
+    socklen_t client_len = sizeof(client_address);
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &client_len);
+    if (client_fd == -1) {
+        perror("accept");
+        return;
+    }
+
+    fcntl(client_fd, F_SETFL, O_NONBLOCK);
+
+    struct epoll_event client_event;
+    client_event.events = EPOLLIN | EPOLLET;
+    client_event.data.fd = client_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
+        perror("epoll_ctl");
+        close(client_fd);
+        return;
+    }
+
+    std::cout << "New client connected: " << client_fd << std::endl;
+}
+
+void ServerManager::handleClientRequest(int epoll_fd, int client_fd) {
+    char buffer[1024] = {0};
+    int valread = read(client_fd, buffer, sizeof(buffer));
+    if (valread <= 0) {
+        std::cout << "Client disconnected: " << client_fd << std::endl;
+        close(client_fd);
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+    } else {
+        std::string rawRequest(buffer, valread);
+        ClientRequest request;
+        if (request.parse(rawRequest)) {
+            std::string requestedPath = request.getResourcePath();
+            int serverIndex = 0; // Assuming single server for now, adjust as needed
+            std::string root = getConfigValue(serverIndex, "root");
+            std::string index = getConfigValue(serverIndex, "index");
+            std::string errorPageDirective = getConfigValue(serverIndex, "error_page");
+
+            // Parse error_page directive (e.g., "404 /error404.html")
+            std::string errorCode, errorPage;
+            std::istringstream errorPageStream(errorPageDirective);
+            errorPageStream >> errorCode >> errorPage;
+
+            if (requestedPath == "/") {
+                requestedPath = "/" + index; // Use the configured index file
+            }
+
+            std::string fullPath = root + requestedPath;
+            std::ifstream file(fullPath.c_str(), std::ios::binary);
+
+            if (file.is_open()) {
+                // Read the file content into the body variable
+                std::ostringstream bodyStream;
+                bodyStream << file.rdbuf();
+                std::string body = bodyStream.str();
+
+                // Determine Content-Type based on file extension
+                std::string contentType = "text/plain";
+                if (requestedPath.find(".html") != std::string::npos) {
+                    contentType = "text/html";
+                } else if (requestedPath.find(".css") != std::string::npos) {
+                    contentType = "text/css";
+                } else if (requestedPath.find(".js") != std::string::npos) {
+                    contentType = "application/javascript";
+                } else if (requestedPath.find(".jpg") != std::string::npos || requestedPath.find(".jpeg") != std::string::npos) {
+                    contentType = "image/jpeg";
+                } else if (requestedPath.find(".png") != std::string::npos) {
+                    contentType = "image/png";
+                }
+
+                std::ostringstream headers;
+                headers << "HTTP/1.1 200 OK\r\n";
+                headers << "Content-Length: " << body.size() << "\r\n";
+                headers << "Content-Type: " << contentType << "\r\n";
+                headers << "\r\n";
+
+                send(client_fd, headers.str().c_str(), headers.str().size(), 0);
+                send(client_fd, body.c_str(), body.size(), 0);
+            } else {
+                // Serve the error page
+                std::string errorPagePath = root + errorPage;
+                std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
+                if (errorFile.is_open()) {
+                    std::ostringstream bodyStream;
+                    bodyStream << errorFile.rdbuf();
+                    std::string body = bodyStream.str();
+
+                    std::ostringstream headers;
+                    headers << "HTTP/1.1 " << errorCode << " Not Found\r\n";
+                    headers << "Content-Length: " << body.size() << "\r\n";
+                    headers << "Content-Type: text/html\r\n";
+                    headers << "\r\n";
+
+                    send(client_fd, headers.str().c_str(), headers.str().size(), 0);
+                    send(client_fd, body.c_str(), body.size(), 0);
+                } else {
+                    // Fallback if error page file does not exist
+                    std::string notFoundResponse = 
+                        "HTTP/1.1 404 Not Found\r\n"
+                        "Content-Length: 13\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "\r\n"
+                        "404 Not Found";
+                    send(client_fd, notFoundResponse.c_str(), notFoundResponse.size(), 0);
+                }
+            }
+        } else {
+            std::cerr << "Failed to parse request from client: " << client_fd << std::endl;
+        }
+    }
+}
+
+void ServerManager::cleanup(int epoll_fd, const std::vector<int> &server_fds) {
     close(epoll_fd);
-    for (size_t i = 0; i < server_fds.size(); ++i) {
-        close(server_fds[i]);
+    for (std::vector<int>::const_iterator it = server_fds.begin(); it != server_fds.end(); ++it) {
+        close(*it);
     }
 }
 
