@@ -12,18 +12,19 @@ class Response{
 		std::string _path;
 		std::string _method;
 		Config	&_config;
-		std::string _sentValue;
 		std::pair<std::string, void (Response::*)()> _func[3];
+        std::map<std::string, std::string>  _headers;
+		int _indexServ;
+		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
 	public :
-		Response(int fd, std::string file, std::string cmd, Config &serv_conf);
+		Response(int fd, std::string file, std::string cmd, Config &serv_conf, std::map<std::string, std::string> headers, int index);
 		~Response();
 		Response(const Response &other);
 		Response &operator=(const Response &other);
-		void modifSentValue(std::string str);
 		void dealGet();
 		void dealPost();
 		void dealDelete();
 		void oriente();
-		void sendClient(int code, std::string mthd);
 		void bad_method();
+		bool	checkPost(std::string postUrl);
 };

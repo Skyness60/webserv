@@ -1,4 +1,6 @@
 #include "ServerManager.hpp"
+#include <sys/epoll.h>
+#include <fcntl.h>
 
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename)
 {
@@ -42,108 +44,149 @@ void ServerManager::loadConfig()
  * sur le port 8080
  */
 
-void ServerManager::startServer()
-{
-	std::vector<int> server_fds;
-	std::vector<struct sockaddr_in> addresses;
+void ServerManager::startServer() {
+    std::vector<int> server_fds;
+    std::vector<struct sockaddr_in> addresses;
 
-	// Create a socket and bind it for each server configuration
-	for (int i = 0; i < getServersCount(); ++i)
-	{
-		int server_fd;
-		struct sockaddr_in address;
-		int opt = 1;
+    // Create a socket and bind it for each server configuration
+    for (int i = 0; i < getServersCount(); ++i) {
+        int server_fd;
+        struct sockaddr_in address;
+        int opt = 1;
 
-		// Check if "listen" key exists in the configuration
-		std::string listenValue;
-		try
-		{
-			listenValue = getConfigValue(i, "listen");
-		}
-		catch (const std::exception &e)
-		{
-			std::cerr << "Error: Missing 'listen' configuration for server " << i << ". Skipping this server." << std::endl;
-			continue;
-		}
+        std::string listenValue;
+        try {
+            listenValue = getConfigValue(i, "listen");
+        } catch (const std::exception &e) {
+            std::cerr << "Error: Missing 'listen' configuration for server " << i << ". Skipping this server." << std::endl;
+            continue;
+        }
 
-		// Validate the listen value (e.g., ensure it's a valid port number)
-		int port = std::atoi(listenValue.c_str());
-		if (port <= 0 || port > 65535)
-		{
-			std::cerr << "Error: Invalid 'listen' value for server " << i << ": " << listenValue << ". Skipping this server." << std::endl;
-			continue;
-		}
+        int port = std::atoi(listenValue.c_str());
+        if (port <= 0 || port > 65535) {
+            std::cerr << "Error: Invalid 'listen' value for server " << i << ": " << listenValue << ". Skipping this server." << std::endl;
+            continue;
+        }
 
-		server_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (server_fd == -1)
-		{
-			std::cerr << "Error: Could not create socket for server " << i << ". Skipping this server." << std::endl;
-			continue;
-		}
+        server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_fd == -1) {
+            std::cerr << "Error: Could not create socket for server " << i << ". Skipping this server." << std::endl;
+            continue;
+        }
 
-		if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1)
-		{
-			std::cerr << "Error: Could not set socket options for server " << i << ". Skipping this server." << std::endl;
-			close(server_fd);
-			continue;
-		}
+        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) == -1) {
+            std::cerr << "Error: Could not set socket options for server " << i << ". Skipping this server." << std::endl;
+            close(server_fd);
+            continue;
+        }
 
-		address.sin_family = AF_INET;
-		address.sin_addr.s_addr = INADDR_ANY;
-		address.sin_port = htons(static_cast<uint16_t>(port));
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = INADDR_ANY;
+        address.sin_port = htons(static_cast<uint16_t>(port));
 
-		if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1)
-		{
-			std::cerr << "Error: Could not bind socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
-			close(server_fd);
-			continue;
-		}
+        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1) {
+            std::cerr << "Error: Could not bind socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
+            close(server_fd);
+            continue;
+        }
 
-		if (listen(server_fd, 10) == -1)
-		{
-			std::cerr << "Error: Could not listen on socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
-			close(server_fd);
-			continue;
-		}
+        if (listen(server_fd, 10) == -1) {
+            std::cerr << "Error: Could not listen on socket for server " << i << " on port " << port << ". Skipping this server." << std::endl;
+            close(server_fd);
+            continue;
+        }
 
-		std::cout << "Server " << i << " listening on port " << port << std::endl;
+        std::cout << "Server " << i << " listening on port " << port << std::endl;
 
-		server_fds.push_back(server_fd);
-		addresses.push_back(address);
-	}
+        server_fds.push_back(server_fd);
+        addresses.push_back(address);
+    }
 
-	// Infinite loop to handle incoming connections for all servers
-	while (true)
-	{
-		for (size_t i = 0; i < server_fds.size(); ++i)
-		{
-			int addrlen = sizeof(addresses[i]);
-			int new_socket = accept(server_fds[i], (struct sockaddr *)&addresses[i], (socklen_t *)&addrlen);
-			if (new_socket == -1)
-				continue; // Non-blocking accept, skip if no connection
+    // Create epoll instance
+    int epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) {
+        perror("epoll_create1");
+        exit(EXIT_FAILURE);
+    }
 
-			std::cout << "New connection on server " << i << " (port " << getConfigValue(static_cast<int>(i), "listen") << ")" << std::endl;
+    // Add server sockets to epoll
+    for (size_t i = 0; i < server_fds.size(); ++i) {
+        struct epoll_event event;
+        event.events = EPOLLIN; // Ready to read
+        event.data.fd = server_fds[i];
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fds[i], &event) == -1) {
+            perror("epoll_ctl");
+            exit(EXIT_FAILURE);
+        }
+    }
 
-			char buffer[1024] = {0};
-			int valread = read(new_socket, buffer, sizeof(buffer));
-			if (valread > 0)
-			{
-				std::string rawRequest(buffer, valread);
-				std::cout << "Received request: " << buffer << std::endl;
-				ClientRequest request;
-				if (request.parse(rawRequest))
-				{
-					std::cout << "Parsed request:" << std::endl;
-					request.printRequest();
-					// Handle the request here
-					Response response(new_socket, request.getPath(), request.getMethod(), _config);
-					response.oriente();
-				}
-				else
-					throw std::runtime_error("Failed to parse request");
-			}
-		}
-	}
+    // Event loop
+    const int MAX_EVENTS = 10;
+    struct epoll_event events[MAX_EVENTS];
+
+    while (true) {
+        int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        if (num_events == -1) {
+            perror("epoll_wait");
+            exit(EXIT_FAILURE);
+        }
+
+        for (int i = 0; i < num_events; ++i) {
+            int event_fd = events[i].data.fd;
+
+            // Check if it's a server socket (new connection)
+            if (std::find(server_fds.begin(), server_fds.end(), event_fd) != server_fds.end()) {
+                struct sockaddr_in client_address;
+                socklen_t client_len = sizeof(client_address);
+                int client_fd = accept(event_fd, (struct sockaddr *)&client_address, &client_len);
+                if (client_fd == -1) {
+                    perror("accept");
+                    continue;
+                }
+
+                // Set client socket to non-blocking
+                fcntl(client_fd, F_SETFL, O_NONBLOCK);
+
+                // Add client socket to epoll
+                struct epoll_event client_event;
+                client_event.events = EPOLLIN | EPOLLET; // Edge-triggered
+                client_event.data.fd = client_fd;
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
+                    perror("epoll_ctl");
+                    close(client_fd);
+                    continue;
+                }
+
+                std::cout << "New client connected: " << client_fd << std::endl;
+            } else {
+                // Handle client request
+                char buffer[1024] = {0};
+                int valread = read(event_fd, buffer, sizeof(buffer));
+                if (valread <= 0) {
+                    // Client disconnected
+                    std::cout << "Client disconnected: " << event_fd << std::endl;
+                    close(event_fd);
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, event_fd, NULL);
+                } else {
+                    // Process request
+                    std::string rawRequest(buffer, valread);
+                    ClientRequest request;
+                    if (request.parse(rawRequest)) {
+                        Response response(event_fd, request.getPath(), request.getMethod(), _config, request.getHeaders(), 0);
+                        response.oriente();
+                    } else {
+                        std::cerr << "Failed to parse request from client: " << event_fd << std::endl;
+                    }
+                }
+            }
+        }
+    }
+
+    // Cleanup
+    close(epoll_fd);
+    for (size_t i = 0; i < server_fds.size(); ++i) {
+        close(server_fds[i]);
+    }
 }
 
 std::string ServerManager::getConfigValue(int server, std::string key)
@@ -169,4 +212,8 @@ std::string ServerManager::getLocationValue(int server, std::string locationKey,
 int	ServerManager::getServersCount()
 {
 	return _config.getConfigValues().size();
+}
+
+std::vector<std::string> ServerManager::getLocationName(int index){
+	return _config.getLocationName(index);
 }

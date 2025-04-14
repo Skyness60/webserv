@@ -18,4 +18,5 @@ class ServerManager {
 		std::vector<std::map<std::string, std::map<std::string, std::string> > > getLocationValues();
 		std::string getLocationValue(int server, std::string locationKey, std::string valueKey);
 		int getServersCount();
+		std::vector<std::string> getLocationName(int index);
 };
