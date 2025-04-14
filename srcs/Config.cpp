@@ -287,3 +287,12 @@ std::string Config::getLocationValue(int serverIndex, std::string locationKey, s
 
     return innerIt->second;
 }
+
+std::vector<std::string> Config::getLocationName(int index){
+	std::vector<std::string> vector;
+	std::vector<std::map<std::string, std::map<std::string, std::string> > > values = this->getLocationValues();
+	for (std::map<std::string, std::map<std::string, std::string> >::iterator it = values[index].begin(); it != values[index].end(); it++){
+		vector.push_back(it->first);
+	}
+	return vector;
+}

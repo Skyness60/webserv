@@ -136,7 +136,9 @@ void ServerManager::startServer()
 					std::cout << "Parsed request:" << std::endl;
 					request.printRequest();
 					// Handle the request here
-					Response response(new_socket, request.getPath(), request.getMethod(), _config);
+					for (size_t toto = 0; toto < getLocationName(i).size(); toto++) 
+						std::cout << getLocationName(i)[toto] << std::endl;
+					Response response(new_socket, request.getPath(), request.getMethod(), _config, request.getHeaders(), i);
 					response.oriente();
 				}
 				else
@@ -169,4 +171,8 @@ std::string ServerManager::getLocationValue(int server, std::string locationKey,
 int	ServerManager::getServersCount()
 {
 	return _config.getConfigValues().size();
+}
+
+std::vector<std::string> ServerManager::getLocationName(int index){
+	return _config.getLocationName(index);
 }
