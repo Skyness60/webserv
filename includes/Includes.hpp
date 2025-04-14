@@ -29,4 +29,7 @@
 #include <cstdlib>				// std lib c
 #include "ClientRequest.hpp"	// ClientRequest class
 #include "Response.hpp"			// Response class
+#include <errno.h>				// errno
+#include <cstring>				// strerror
+#include <algorithm>			// std::find
 //#include <sys/event.h>		// for MAC

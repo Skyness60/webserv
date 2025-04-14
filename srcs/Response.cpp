@@ -63,7 +63,7 @@ void Response::dealGet(){
 
 bool	Response::checkPost(std::string postUrl){
 	std::vector<std::string> vector = this->_config.getLocationName(_indexServ);
-	for (int i = 0; i < vector.size(); i++)
+	for (size_t i = 0; i < vector.size(); i++)
 		if (!vector[i].find(postUrl))
 			return 1;
 	return 0;
@@ -74,15 +74,45 @@ void Response::dealPost(){
 
 }
 
-void Response::dealDelete(){
-	
+void Response::sendResponse(int statusCode, const std::string &statusMessage, const std::string &body) {
+	std::ostringstream response;
+	response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
+	response << "Content-Length: " << body.size() << "\r\n";
+	response << "Content-Type: text/plain\r\n";
+	response << "\r\n";
+	response << body;
+	send(_client_fd, response.str().c_str(), response.str().size(), 0);
 }
 
-void Response::oriente(){
+void Response::dealDelete() {
+    std::cout << "Entering dealDelete function..." << std::endl;
+    std::cout << "Requested path: " << _path << std::endl;
+
+    // Construct the full path to the file
+    std::string fullPath = "./www" + _path;
+    std::cout << "Full path: " << fullPath << std::endl;
+
+    // Check if the file exists before attempting to delete
+    if (access(fullPath.c_str(), F_OK) != 0) {
+        std::cerr << "File not found: " << fullPath << std::endl;
+        sendResponse(404, "Not Found", "The requested file does not exist.");
+        return;
+    }
+
+    // Attempt to delete the file
+    if (remove(fullPath.c_str()) == 0) {
+        std::cout << "File deleted successfully: " << fullPath << std::endl;
+        sendResponse(200, "OK", "File deleted successfully.");
+    } else {
+        std::cerr << "Failed to delete file: " << fullPath << " - " << std::strerror(errno) << std::endl;
+        sendResponse(500, "Internal Server Error", "Failed to delete the file due to a server error.");
+    }
+}
+
+void Response::oriente() {
 	for (size_t i = 0; i < 3; i++){
-		if (this->_func[i].first.compare(this->_method)) {
-			(this->*(_func[i].second))();
-			return ;
+		if (this->_func[i].first == this->_method) {
+			return (this->*(_func[i].second))();
 		}
 	}
 	//return this->bad_method();

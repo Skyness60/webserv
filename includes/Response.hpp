@@ -15,6 +15,7 @@ class Response{
 		std::pair<std::string, void (Response::*)()> _func[3];
         std::map<std::string, std::string>  _headers;
 		int _indexServ;
+		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
 	public :
 		Response(int fd, std::string file, std::string cmd, Config &serv_conf, std::map<std::string, std::string> headers, int index);
 		~Response();

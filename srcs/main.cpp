@@ -42,11 +42,11 @@ int	main(int ac, char **av)
 			}
 			std::cout << "]" << std::endl;
 		}
-		// server.loadConfig();
-		// server.startServer();
+		server.loadConfig();
+		server.startServer();
 
-		ClientRequest request;
-		request.testClientRequestParsing();
+		// ClientRequest request;
+		// request.testClientRequestParsing();
 
 	} catch (const std::exception &e) {
 		std::cerr << BOLD_RED << e.what() << RESET << std::endl;
