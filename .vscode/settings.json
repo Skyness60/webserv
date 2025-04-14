@@ -80,7 +80,8 @@
 		"charconv": "cpp",
 		"format": "cpp",
 		"text_encoding": "cpp",
-		"variant": "cpp"
+		"variant": "cpp",
+		"cinttypes": "cpp"
 	},
 	"makefile.configureOnOpen": false
 }
