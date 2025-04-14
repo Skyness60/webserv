@@ -194,7 +194,27 @@ void Config::processLine(const std::string &line, bool inLocationBlock, bool inS
 			}
 			else if (key == "root" || key == "error_page")
 			{
-				if (!fileExists(value))
+				if (key == "error_page")
+				{
+					size_t spacePos = value.find(' ');
+					if (spacePos != std::string::npos)
+					{
+						std::string errorCode = trimString(value.substr(0, spacePos));
+						std::string errorPage = trimString(value.substr(spacePos + 1));
+						if (errorCode.empty() || errorPage.empty())
+							throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+						currentServerConfig[key] = errorCode + " " + errorPage;
+					}
+					else
+					{
+						if (value.empty())
+							throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+						currentServerConfig[key] = value;
+					}
+				}
+				else if (value.empty())
+					throwError("Malformed root directive", lineCount, charCountAll, charCountLine);
+				else if (!fileExists(value))
 					throwError("File path does not exist: " + value, lineCount, charCountAll, charCountLine);
 				currentServerConfig[key] = value;
 			}
