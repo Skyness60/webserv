@@ -43,10 +43,15 @@ int	main(int ac, char **av)
 			std::cout << "]" << std::endl;
 		}
 		server.loadConfig();
-		server.startServer();
 
-		// ClientRequest request;
-		// request.testClientRequestParsing();
+		// Start the Python chatbot in the background
+        // Start the Python chatbot in the background and redirect its output
+		std::cout << " ✨💖 Starting Britney Sparkle AI chatbot...✨💖" << std::endl;
+		std::string chatbotPath = "./www/BritneySparkle_IA";
+		std::string command = "cd " + chatbotPath + " && python3 BritneySparkle_chatbot.py > /dev/null 2>&1 &";
+		system(command.c_str());
+
+		server.startServer();
 
 	} catch (const std::exception &e) {
 		std::cerr << BOLD_RED << e.what() << RESET << std::endl;
