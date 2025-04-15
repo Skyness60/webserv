@@ -209,79 +209,13 @@ void ServerManager::handleClientRequest(int epoll_fd, int client_fd) {
         ClientRequest request;
         if (request.parse(rawRequest)) {
             std::string requestedPath = request.getResourcePath();
+            std::string method = request.getMethod();
+            std::map<std::string, std::string> headers = request.getHeaders();
             int serverIndex = 0; // Assuming single server for now, adjust as needed
-            std::string root = getConfigValue(serverIndex, "root");
-            std::string index = getConfigValue(serverIndex, "index");
-            std::string errorPageDirective = getConfigValue(serverIndex, "error_page");
 
-            // Parse error_page directive (e.g., "404 /error404.html")
-            std::string errorCode, errorPage;
-            std::istringstream errorPageStream(errorPageDirective);
-            errorPageStream >> errorCode >> errorPage;
-
-            if (requestedPath == "/") {
-                requestedPath = "/" + index; // Use the configured index file
-            }
-
-            std::string fullPath = root + requestedPath;
-            std::ifstream file(fullPath.c_str(), std::ios::binary);
-
-            if (file.is_open()) {
-                // Read the file content into the body variable
-                std::ostringstream bodyStream;
-                bodyStream << file.rdbuf();
-                std::string body = bodyStream.str();
-
-                // Determine Content-Type based on file extension
-                std::string contentType = "text/plain";
-                if (requestedPath.find(".html") != std::string::npos) {
-                    contentType = "text/html";
-                } else if (requestedPath.find(".css") != std::string::npos) {
-                    contentType = "text/css";
-                } else if (requestedPath.find(".js") != std::string::npos) {
-                    contentType = "application/javascript";
-                } else if (requestedPath.find(".jpg") != std::string::npos || requestedPath.find(".jpeg") != std::string::npos) {
-                    contentType = "image/jpeg";
-                } else if (requestedPath.find(".png") != std::string::npos) {
-                    contentType = "image/png";
-                }
-
-                std::ostringstream headers;
-                headers << "HTTP/1.1 200 OK\r\n";
-                headers << "Content-Length: " << body.size() << "\r\n";
-                headers << "Content-Type: " << contentType << "\r\n";
-                headers << "\r\n";
-
-                send(client_fd, headers.str().c_str(), headers.str().size(), 0);
-                send(client_fd, body.c_str(), body.size(), 0);
-            } else {
-                // Serve the error page
-                std::string errorPagePath = root + errorPage;
-                std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
-                if (errorFile.is_open()) {
-                    std::ostringstream bodyStream;
-                    bodyStream << errorFile.rdbuf();
-                    std::string body = bodyStream.str();
-
-                    std::ostringstream headers;
-                    headers << "HTTP/1.1 " << errorCode << " Not Found\r\n";
-                    headers << "Content-Length: " << body.size() << "\r\n";
-                    headers << "Content-Type: text/html\r\n";
-                    headers << "\r\n";
-
-                    send(client_fd, headers.str().c_str(), headers.str().size(), 0);
-                    send(client_fd, body.c_str(), body.size(), 0);
-                } else {
-                    // Fallback if error page file does not exist
-                    std::string notFoundResponse = 
-                        "HTTP/1.1 404 Not Found\r\n"
-                        "Content-Length: 13\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "\r\n"
-                        "404 Not Found";
-                    send(client_fd, notFoundResponse.c_str(), notFoundResponse.size(), 0);
-                }
-            }
+            // Use Response to handle the request
+            Response response(client_fd, requestedPath, method, _config, headers, serverIndex);
+            response.oriente();
         } else {
             std::cerr << "Failed to parse request from client: " << client_fd << std::endl;
         }
