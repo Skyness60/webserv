@@ -163,93 +163,101 @@ void Config::processLine(const std::string &line, bool inLocationBlock, bool inS
             std::string key = trimString(line.substr(0, spacePos));
             std::string value = trimString(line.substr(spacePos + 1, semicolonPos - spacePos - 1));
             value = extractValue(value);
-			if (key == "listen")
-			{
-				int port = std::atoi(value.c_str());
-				if (value.empty())
-					throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
-				if (port <= 0 || port > 65535)
-					throwError("Invalid port number in listen directive", lineCount, charCountAll, charCountLine);
-				size_t colonPos = value.find(':');
-				if (colonPos != std::string::npos)
-				{
-					std::string host = trimString(value.substr(0, colonPos));
-					std::string port = trimString(value.substr(colonPos + 1));
-					if (host.empty() || port.empty())
-						throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
-					currentServerConfig[key] = host + ":" + port;
-				}
-				else
-				{
-					if (value.empty())
-						throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
-					currentServerConfig[key] = value;
-				}
-			}
-			else if (key == "server_name")
-			{
-				if (value.empty())
-					throwError("Malformed server_name directive", lineCount, charCountAll, charCountLine);
-				currentServerConfig[key] = value;
-			}
-			else if (key == "root" || key == "error_page")
-			{
-				if (key == "error_page")
-				{
-					size_t spacePos = value.find(' ');
-					if (spacePos != std::string::npos)
-					{
-						std::string errorCode = trimString(value.substr(0, spacePos));
-						std::string errorPage = trimString(value.substr(spacePos + 1));
-						if (errorCode.empty() || errorPage.empty())
-							throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
-						currentServerConfig[key] = errorCode + " " + errorPage;
-					}
-					else
-					{
-						if (value.empty())
-							throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
-						currentServerConfig[key] = value;
-					}
-				}
-				else if (value.empty())
-					throwError("Malformed root directive", lineCount, charCountAll, charCountLine);
-				else if (!fileExists(value))
-					throwError("File path does not exist: " + value, lineCount, charCountAll, charCountLine);
-				currentServerConfig[key] = value;
-			}
-			else if (key == "index")
-			{
-				if (value.empty())
-					throwError("Malformed index directive", lineCount, charCountAll, charCountLine);
-				currentServerConfig[key] = value;
-			}
-			else if (key == "error_page")
-			{
-				if (value.empty())
-					throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
-				size_t spacePos = value.find(' ');
-				if (spacePos != std::string::npos)
-				{
-					std::string errorCode = trimString(value.substr(0, spacePos));
-					std::string errorPage = trimString(value.substr(spacePos + 1));
-					if (errorCode.empty() || errorPage.empty())
-						throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
-					currentServerConfig[key] = errorCode + " " + errorPage;
-				}
-				else
-				{
-					if (value.empty())
-						throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
-					currentServerConfig[key] = value;
-				}
-			}
-			else if (key == "autoindex")
-			{
-				if (value != "on" && value != "off")
-					throwError("Malformed autoindex directive", lineCount, charCountAll, charCountLine);
-				currentServerConfig[key] = value;
-			}
+
+            if (key == "error_page")
+            {
+                size_t spacePos = value.find_last_of(' ');
+                if (spacePos != std::string::npos)
+                {
+                    std::string errorCodes = trimString(value.substr(0, spacePos));
+                    std::string errorPage = trimString(value.substr(spacePos + 1));
+                    if (errorCodes.empty() || errorPage.empty())
+                        throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+
+                    // Split error codes and associate each with the error page
+                    std::istringstream errorCodeStream(errorCodes);
+                    std::string errorCode;
+                    while (errorCodeStream >> errorCode)
+                    {
+                        if (inLocationBlock)
+                            currentLocationConfig["error_page " + errorCode] = errorPage;
+                        else if (inServerBlock)
+                            currentServerConfig["error_page " + errorCode] = errorPage;
+                    }
+                }
+                else
+                {
+                    throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+                }
+                return; // Ensure no generic "error_page" key is added
+            }
+            else if (key == "listen")
+            {
+                int port = std::atoi(value.c_str());
+                if (value.empty())
+                    throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
+                if (port <= 0 || port > 65535)
+                    throwError("Invalid port number in listen directive", lineCount, charCountAll, charCountLine);
+                size_t colonPos = value.find(':');
+                if (colonPos != std::string::npos)
+                {
+                    std::string host = trimString(value.substr(0, colonPos));
+                    std::string port = trimString(value.substr(colonPos + 1));
+                    if (host.empty() || port.empty())
+                        throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
+                    currentServerConfig[key] = host + ":" + port;
+                }
+                else
+                {
+                    if (value.empty())
+                        throwError("Malformed listen directive", lineCount, charCountAll, charCountLine);
+                    currentServerConfig[key] = value;
+                }
+            }
+            else if (key == "server_name")
+            {
+                if (value.empty())
+                    throwError("Malformed server_name directive", lineCount, charCountAll, charCountLine);
+                currentServerConfig[key] = value;
+            }
+            else if (key == "root" || key == "error_page")
+            {
+                if (key == "error_page")
+                {
+                    size_t spacePos = value.find(' ');
+                    if (spacePos != std::string::npos)
+                    {
+                        std::string errorCode = trimString(value.substr(0, spacePos));
+                        std::string errorPage = trimString(value.substr(spacePos + 1));
+                        if (errorCode.empty() || errorPage.empty())
+                            throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+                        currentServerConfig[key] = errorCode + " " + errorPage;
+                    }
+                    else
+                    {
+                        if (value.empty())
+                            throwError("Malformed error_page directive", lineCount, charCountAll, charCountLine);
+                        currentServerConfig[key] = value;
+                    }
+                }
+                else if (value.empty())
+                    throwError("Malformed root directive", lineCount, charCountAll, charCountLine);
+                else if (!fileExists(value))
+                    throwError("File path does not exist: " + value, lineCount, charCountAll, charCountLine);
+                currentServerConfig[key] = value;
+            }
+            else if (key == "index")
+            {
+                if (value.empty())
+                    throwError("Malformed index directive", lineCount, charCountAll, charCountLine);
+                currentServerConfig[key] = value;
+            }
+            else if (key == "autoindex")
+            {
+                if (value != "on" && value != "off")
+                    throwError("Malformed autoindex directive", lineCount, charCountAll, charCountLine);
+                currentServerConfig[key] = value;
+            }
             if (inLocationBlock)
                 currentLocationConfig[key] = value;
             else if (inServerBlock)
