@@ -2,6 +2,8 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 
+volatile bool stopServer = false;
+
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename)
 {
 	loadConfig();
@@ -38,15 +40,25 @@ void ServerManager::loadConfig()
 	// configFile.close();
 }
 
+void signalHandler(int signum) {
+	if (signum == SIGINT || signum == SIGTERM) {
+		stopServer = true;
+	}
+}
+
 /*
  * Fonction qui démarre un serveur TCP/IP simple
  * Elle crée une "porte d'entrée" (socket) qui écoute les connexions entrantes
  * sur le port 8080
  */
 
+
 void ServerManager::startServer() {
     std::vector<int> server_fds;
     std::vector<struct sockaddr_in> addresses;
+
+	signal (SIGINT, signalHandler);
+	signal (SIGTERM, signalHandler);
 
     // Create and configure server sockets
     for (int i = 0; i < getServersCount(); ++i) {
@@ -59,10 +71,13 @@ void ServerManager::startServer() {
     }
 
     int epoll_fd = setupEpollInstance(server_fds);
-    if (epoll_fd == -1)
+    if (epoll_fd == -1) {
         return;
+	}
 
-    eventLoop(epoll_fd, server_fds);
+	while (!stopServer) {
+    	eventLoop(epoll_fd, server_fds);
+	}
 
     cleanup(epoll_fd, server_fds);
 }
@@ -155,9 +170,12 @@ void ServerManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds) 
     const int MAX_EVENTS = 10;
     struct epoll_event events[MAX_EVENTS];
 
-    while (true) {
+    while (!stopServer) {
         int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         if (num_events == -1) {
+			if (errno == EINTR) {
+				continue; // Interrupted by signal, retry
+			}
             perror("epoll_wait");
             break;
         }
@@ -209,79 +227,13 @@ void ServerManager::handleClientRequest(int epoll_fd, int client_fd) {
         ClientRequest request;
         if (request.parse(rawRequest)) {
             std::string requestedPath = request.getResourcePath();
+            std::string method = request.getMethod();
+            std::map<std::string, std::string> headers = request.getHeaders();
             int serverIndex = 0; // Assuming single server for now, adjust as needed
-            std::string root = getConfigValue(serverIndex, "root");
-            std::string index = getConfigValue(serverIndex, "index");
-            std::string errorPageDirective = getConfigValue(serverIndex, "error_page");
 
-            // Parse error_page directive (e.g., "404 /error404.html")
-            std::string errorCode, errorPage;
-            std::istringstream errorPageStream(errorPageDirective);
-            errorPageStream >> errorCode >> errorPage;
-
-            if (requestedPath == "/") {
-                requestedPath = "/" + index; // Use the configured index file
-            }
-
-            std::string fullPath = root + requestedPath;
-            std::ifstream file(fullPath.c_str(), std::ios::binary);
-
-            if (file.is_open()) {
-                // Read the file content into the body variable
-                std::ostringstream bodyStream;
-                bodyStream << file.rdbuf();
-                std::string body = bodyStream.str();
-
-                // Determine Content-Type based on file extension
-                std::string contentType = "text/plain";
-                if (requestedPath.find(".html") != std::string::npos) {
-                    contentType = "text/html";
-                } else if (requestedPath.find(".css") != std::string::npos) {
-                    contentType = "text/css";
-                } else if (requestedPath.find(".js") != std::string::npos) {
-                    contentType = "application/javascript";
-                } else if (requestedPath.find(".jpg") != std::string::npos || requestedPath.find(".jpeg") != std::string::npos) {
-                    contentType = "image/jpeg";
-                } else if (requestedPath.find(".png") != std::string::npos) {
-                    contentType = "image/png";
-                }
-
-                std::ostringstream headers;
-                headers << "HTTP/1.1 200 OK\r\n";
-                headers << "Content-Length: " << body.size() << "\r\n";
-                headers << "Content-Type: " << contentType << "\r\n";
-                headers << "\r\n";
-
-                send(client_fd, headers.str().c_str(), headers.str().size(), 0);
-                send(client_fd, body.c_str(), body.size(), 0);
-            } else {
-                // Serve the error page
-                std::string errorPagePath = root + errorPage;
-                std::ifstream errorFile(errorPagePath.c_str(), std::ios::binary);
-                if (errorFile.is_open()) {
-                    std::ostringstream bodyStream;
-                    bodyStream << errorFile.rdbuf();
-                    std::string body = bodyStream.str();
-
-                    std::ostringstream headers;
-                    headers << "HTTP/1.1 " << errorCode << " Not Found\r\n";
-                    headers << "Content-Length: " << body.size() << "\r\n";
-                    headers << "Content-Type: text/html\r\n";
-                    headers << "\r\n";
-
-                    send(client_fd, headers.str().c_str(), headers.str().size(), 0);
-                    send(client_fd, body.c_str(), body.size(), 0);
-                } else {
-                    // Fallback if error page file does not exist
-                    std::string notFoundResponse = 
-                        "HTTP/1.1 404 Not Found\r\n"
-                        "Content-Length: 13\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "\r\n"
-                        "404 Not Found";
-                    send(client_fd, notFoundResponse.c_str(), notFoundResponse.size(), 0);
-                }
-            }
+            // Use Response to handle the request
+            Response response(client_fd, requestedPath, method, _config, headers, serverIndex);
+            response.oriente();
         } else {
             std::cerr << "Failed to parse request from client: " << client_fd << std::endl;
         }
