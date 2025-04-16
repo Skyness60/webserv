@@ -32,4 +32,6 @@
 #include <errno.h>				// errno
 #include <cstring>				// strerror
 #include <algorithm>			// std::find
+#include <signal.h>				// sigaction
+#include <csignal>				// sigaction
 //#include <sys/event.h>		// for MAC

@@ -2,6 +2,7 @@
 
 #include "Includes.hpp"
 
+
 class ServerManager {
 	private:
 		std::string _filename;
