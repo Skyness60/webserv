@@ -1,5 +1,5 @@
 CXX = c++
-CXXFLAGS = -Wall -Werror -Wextra -std=c++98 -MMD
+CXXFLAGS = -Wall -Werror -Wextra -std=c++11 -MMD
 SRC_DIR = srcs
 OBJ_DIR = obj
 INC_DIR = includes
@@ -10,7 +10,10 @@ SRC = srcs/main.cpp \
 		srcs/ServerManager.cpp \
 		srcs/Config.cpp \
 		srcs/Response.cpp \
-		srcs/ClientRequest.cpp
+		srcs/ClientRequest.cpp \
+		srcs/SignalHandler.cpp \
+		srcs/SocketManager.cpp \
+		srcs/EpollManager.cpp \
 
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 
