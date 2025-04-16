@@ -11,8 +11,8 @@ class ServerManager {
 		struct sockaddr_in getServerAddress(int serverIndex);
 		int setupEpollInstance(const std::vector<int> &server_fds);
 		void eventLoop(int epoll_fd, const std::vector<int> &server_fds);
-		void handleNewConnection(int epoll_fd, int server_fd);
-		void handleClientRequest(int epoll_fd, int client_fd);
+		void handleNewConnection(int server_fd, int epoll_fd);
+		void handleClientRequest(int client_fd, int epoll_fd);
 		void cleanup(int epoll_fd, const std::vector<int> &server_fds);
 	public:
 		ServerManager(std::string filename);
