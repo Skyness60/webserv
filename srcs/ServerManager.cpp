@@ -2,6 +2,8 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 
+volatile bool stopServer = false;
+
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename)
 {
 	loadConfig();
@@ -38,15 +40,25 @@ void ServerManager::loadConfig()
 	// configFile.close();
 }
 
+void signalHandler(int signum) {
+	if (signum == SIGINT || signum == SIGTERM) {
+		stopServer = true;
+	}
+}
+
 /*
  * Fonction qui démarre un serveur TCP/IP simple
  * Elle crée une "porte d'entrée" (socket) qui écoute les connexions entrantes
  * sur le port 8080
  */
 
+
 void ServerManager::startServer() {
     std::vector<int> server_fds;
     std::vector<struct sockaddr_in> addresses;
+
+	signal (SIGINT, signalHandler);
+	signal (SIGTERM, signalHandler);
 
     // Create and configure server sockets
     for (int i = 0; i < getServersCount(); ++i) {
@@ -59,10 +71,13 @@ void ServerManager::startServer() {
     }
 
     int epoll_fd = setupEpollInstance(server_fds);
-    if (epoll_fd == -1)
+    if (epoll_fd == -1) {
         return;
+	}
 
-    eventLoop(epoll_fd, server_fds);
+	while (!stopServer) {
+    	eventLoop(epoll_fd, server_fds);
+	}
 
     cleanup(epoll_fd, server_fds);
 }
@@ -155,9 +170,12 @@ void ServerManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds) 
     const int MAX_EVENTS = 10;
     struct epoll_event events[MAX_EVENTS];
 
-    while (true) {
+    while (!stopServer) {
         int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         if (num_events == -1) {
+			if (errno == EINTR) {
+				continue; // Interrupted by signal, retry
+			}
             perror("epoll_wait");
             break;
         }
