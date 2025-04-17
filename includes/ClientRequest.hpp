@@ -62,6 +62,7 @@ class ClientRequest {
     // Getters
         std::string         getMethod()         const;
         std::string         getPath()           const;
+		std::map<std::string, std::string> getFormData() const;
         std::string         getResourcePath()   const;
         std::string         getHttpVersion()    const;
         std::string         getBody()           const;
