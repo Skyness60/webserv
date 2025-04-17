@@ -102,16 +102,16 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     } else {
-        std::string rawRequest(buffer, valread);
+		std::string rawRequest(buffer, valread);
+		std::cout << rawRequest << std::endl;
         ClientRequest request;
         if (request.parse(rawRequest)) {
             std::string requestedPath = request.getResourcePath();
             std::string method = request.getMethod();
             std::map<std::string, std::string> headers = request.getHeaders();
-            int serverIndex = 0; // Supposons un seul serveur pour l'instant
-
-            // Utilisation de Response pour traiter la requête
-            Response response(client_fd, requestedPath, method, _config, headers, serverIndex);
+            int serverIndex = 0;
+            // Use Response to handle the request
+            Response response(client_fd, request, _config, serverIndex);
             response.oriente();
         } else {
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;

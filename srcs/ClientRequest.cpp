@@ -45,6 +45,7 @@ std::string         ClientRequest::getBody() const { return _body; }
 std::map<std::string, std::string> ClientRequest::getHeaders() const { return _headers; }
 std::string ClientRequest::getResourcePath() const { return _resourcePath; }
 std::map<std::string, std::string> ClientRequest::getQueryParams() const { return _queryParams; }
+std::map<std::string, std::string> ClientRequest::getFormData() const { return _formData; }
 
 //--------------------------------------------------------------Methods
 
