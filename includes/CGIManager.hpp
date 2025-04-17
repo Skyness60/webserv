@@ -16,8 +16,9 @@ class CGIManager {
 		CGIManager &operator=(const CGIManager &copy);
 		~CGIManager();
 
-		void executeCGI(int client_fd, const std::string &path, const std::string &method, const std::string &queryString);
-		std::string getCGIPath(const std::string &path);
-		std::string getCGIContentType(const std::string &path);
-		std::string getCGIHeaders(int statusCode, const std::string &contentType, int contentLength);
+		void executeCGI(int client_fd, const std::string &method, const std::string &queryString);
+		std::string getPath() const;
+		std::string getExtension() const;
+		std::string getRoot() const;
+		std::string getLocationName() const;
 };

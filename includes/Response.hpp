@@ -7,6 +7,7 @@
 
 class Config; // Forward declaration of Config class
 class ClientRequest; 
+class CGIManager;
 
 
 class Response{
@@ -17,6 +18,7 @@ class Response{
 		ClientRequest &_request;
 		int _indexServ;
 		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
+		bool isCGI(CGIManager &cgi);
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
 		~Response();
@@ -27,4 +29,5 @@ class Response{
 		void dealDelete();
 		void oriente();
 		bool checkPost(std::string postUrl);
+
 };

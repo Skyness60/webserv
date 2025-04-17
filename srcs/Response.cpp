@@ -47,6 +47,12 @@ void Response::dealGet() {
         fullPath += "/" + indexFile;
     }
 
+	// Ici c'est la ou j'appelerais la fonction CGI (c'est pas encore fait et c'est pas une ia)
+	CGIManager cgi(_config, _indexServ);
+	if (isCGI(cgi)) {
+		std::cout << "coucou c'est moi cgi" << std::endl;
+	}
+
     std::ifstream file(fullPath.c_str(), std::ios::binary);
 	if (!file.is_open()) {
 		// Serve error page if file not found
@@ -223,4 +229,16 @@ void Response::oriente() {
         }
     }
     sendResponse(405, "Method Not Allowed", "The requested method is not supported.");
+}
+
+bool Response::isCGI(CGIManager &cgi) {
+	std::string path = cgi.getPath();
+	std::string extension = cgi.getExtension();
+	std::string root = cgi.getRoot();
+
+	if (path.empty() || extension.empty() || root.empty()) {
+		return false;
+	}
+	else 
+		return true;
 }
