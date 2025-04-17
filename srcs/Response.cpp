@@ -2,7 +2,7 @@
 #include <sys/stat.h>
 
 Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index) 
-    : _client_fd(fd), _config(serv_conf), _indexServ(index), _request(request) {
+	: _client_fd(fd), _config(serv_conf), _request(request), _indexServ(index) {
     this->_func[0] = std::make_pair("GET", &Response::dealGet);
     this->_func[1] = std::make_pair("POST", &Response::dealPost);
     this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
@@ -20,7 +20,7 @@ Response &Response::operator=(const Response &other) {
 }
 
 Response::Response(const Response &other)
-    : _client_fd(other._client_fd), _request(other._request), _config(other._config) {}
+    : _client_fd(other._client_fd), _config(other._config), _request(other._request) {}
 
 static std::string getContentType(const std::string &path) {
     if (path.find(".html") != std::string::npos)
@@ -181,7 +181,8 @@ void Response::dealPost(){
 		std::ofstream out ("playlist.txt");
 		if (out.is_open()){
 			if (this->_request.getHeaders()["Content-Type"] == "application/x-www-form-urlencoded"){
-				for (std::map<std::string, std::string>::iterator it = this->_request.getFormData().begin(); it != this->_request.getFormData().end(); it++){
+				std::map<std::string, std::string> formData = this->_request.getFormData();
+				for (std::map<std::string, std::string>::iterator it = formData.begin(); it != formData.end(); it++){
 					out << it->first << " : " << it->second << std::endl;
 				}
 			}
