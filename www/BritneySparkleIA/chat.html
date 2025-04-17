@@ -22,12 +22,14 @@
       max-width: 800px;
       margin: 20px auto;
       background-color: white;
-      border-radius: 10px;
+      border-radius: 15px;
+      padding: 30px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-      padding: 20px;
-      flex: 1;
       border: 2px solid #ff69b4;
+      position: relative;
+      overflow: hidden;
     }
+      
     .chat-header {
       text-align: center;
       padding-bottom: 20px;
@@ -44,7 +46,7 @@
       margin: 0 10px;
     }
     .chat-messages {
-      height: 400px;
+      height: 200px;
       overflow-y: auto;
       margin-bottom: 20px;
       padding: 10px;
@@ -110,11 +112,16 @@
     }
     .back-link {
       display: block;
-      margin-top: 20px;
+      margin: 15px auto 0;
       text-align: center;
       color: #ff69b4;
       text-decoration: none;
       font-weight: bold;
+      background-color: #ffebf5;
+      padding: 8px 15px;
+      border-radius: 5px;
+      width: fit-content;
+      border: 1px solid #ffcce6;
     }
     .back-link:hover {
       text-decoration: underline;
@@ -147,9 +154,9 @@
       <input type="text" id="message-input" class="chat-input" placeholder="Type your message here..." required>
       <button type="submit" class="chat-button">Send</button>
     </form>
+    
+    <a href="/" class="back-link">Back to Home</a>
   </div>
-  
-  <a href="/" class="back-link">Back to Home</a>
   
   <script>
     // Britney lyrics collection
