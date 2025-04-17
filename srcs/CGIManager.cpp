@@ -28,8 +28,6 @@ CGIManager::CGIManager(Config &config, int serverIndex) : _config(config), _serv
 			root = "";
 		}
 	}
-	if (_path == "" || _extension == "" || _root == "")
-		throw std::runtime_error("[webserv_parser] ERROR: CGI configuration is missing in server " + std::to_string(serverIndex));
 }
 
 CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverIndex(copy._serverIndex)
@@ -54,6 +52,26 @@ CGIManager &CGIManager::operator=(const CGIManager &copy) {
 
 CGIManager::~CGIManager() {}
 
-void CGIManager::executeCGI(int client_fd, const std::string &path, const std::string &method, const std::string &queryString) {
-
+void CGIManager::executeCGI(int client_fd, const std::string &method, const std::string &queryString) {
+	(void)client_fd;
+	(void)method;
+	(void)queryString;
+		
 }
+
+std::string CGIManager::getPath() const {
+	return _path;
+}
+
+std::string CGIManager::getExtension() const {
+	return _extension;
+}
+
+std::string CGIManager::getRoot() const {
+	return _root;
+}
+
+std::string CGIManager::getLocationName() const {
+	return _locationName;
+}
+
