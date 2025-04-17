@@ -3,8 +3,6 @@
 #include "EpollManager.hpp"
 #include "SignalHandler.hpp"
 
-// Variable globale pour arrêter le serveur
-volatile bool stopServer = false;
 
 // Constructeur qui initialise le gestionnaire de serveur avec un fichier de configuration
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename) {
@@ -35,13 +33,6 @@ ServerManager::~ServerManager() {
 void ServerManager::loadConfig() {
     // Cette fonction est actuellement désactivée (code commenté)
     // Elle pourrait lire et afficher le contenu du fichier de configuration
-}
-
-// Gestionnaire de signaux pour arrêter le serveur proprement
-void signalHandler(int signum) {
-    if (signum == SIGINT || signum == SIGTERM) {
-        stopServer = true;
-    }
 }
 
 // Fonction principale pour démarrer le serveur

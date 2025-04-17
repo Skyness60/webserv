@@ -1,4 +1,6 @@
 #include "EpollManager.hpp"
+#include "SocketManager.hpp"
+#include "SignalHandler.hpp"
 
 int EpollManager::setupEpollInstance(const std::vector<int> &server_fds) {
     int epoll_fd = epoll_create1(0);
@@ -24,7 +26,7 @@ void EpollManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds, s
     const int MAX_EVENTS = 10;
     struct epoll_event events[MAX_EVENTS];
 
-    while (true) {
+    while (SignalHandler::stopServer == false) {
         int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         if (num_events == -1) {
             if (errno == EINTR) continue;
