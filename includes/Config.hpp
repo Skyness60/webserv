@@ -28,4 +28,5 @@ class Config {
 		std::vector<std::map<std::string, std::map<std::string, std::string> > > getLocationValues();
 		std::string getLocationValue(int serverIndex, std::string locationKey, std::string valueKey);
 		std::vector<std::string> getLocationName(int index);
+		int getLocationCount(int serverIndex);
 };

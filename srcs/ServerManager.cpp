@@ -147,3 +147,8 @@ int ServerManager::getServersCount() {
 std::vector<std::string> ServerManager::getLocationName(int index) {
     return _config.getLocationName(index);
 }
+
+// Récupère le nombre de locations pour un serveur donné
+int ServerManager::getLocationCount(int serverIndex) {
+	return _config.getLocationCount(serverIndex);
+}
