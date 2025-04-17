@@ -185,9 +185,16 @@ body {
 
   .applications .container {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
+    padding: 0 15px;
+  }
+  
+  .applications__cards-wrapper {
+    display: flex;
+    justify-content: center;
     flex-wrap: wrap;
-    gap: 40px 10px;
+    gap: 40px;
+    max-width: 1170px;
   }
 
   .applications__card {
