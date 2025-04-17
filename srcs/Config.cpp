@@ -317,3 +317,9 @@ std::vector<std::string> Config::getLocationName(int index){
 	}
 	return vector;
 }
+
+int Config::getLocationCount(int serverIndex){
+	if (serverIndex < 0 || serverIndex >= static_cast<int>(_locationValues.size()))
+		return 0;
+	return _locationValues.at(serverIndex).size();
+}
