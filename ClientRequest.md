@@ -32,7 +32,7 @@ The client request parser follows a sequential strategy to process incoming HTTP
 
 1. ⏳ Better error handling for malformed requests
 2. ⏳ Support for additional content types
-3. ⏳ Request size limits to prevent DoS attacks
+3. ⏳ Request size limits to prevent DoS attacks ✅
 4. ⏳ Enhanced validation of input data
 
 
@@ -45,10 +45,29 @@ The main entry point for parsing an HTTP request. Orchestrates the entire parsin
 
 **Example Input:**
 ```
-GET /index.html?page=1 HTTP/1.1
-Host: localhost:8080
-User-Agent: Mozilla/5.0
-Connection: keep-alive
+"POST /submit-form HTTP/1.1\r\n"
+"Host: localhost:8080\r\n"
+ "Content-Type: application/x-www-form-urlencoded\r\n"
+ "Content-Length: 46\r\n"
+  "\r\n"
+"username=johndoe&email=john@example.com&age=30";
+
+```
+**Example Output:**
+```
+_method: POST
+_path: /submit-form
+_httpVersion: HTTP/1.1
+_headers:
+  Content-Length: 46
+  Content-Type: application/x-www-form-urlencoded
+  Host: localhost:8080
+_body: username=johndoe&email=john@example.com&age=30
+_resourcePath: /submit-form
+_formData:
+  age: 30
+  email: john@example.com
+  username: johndoe
 
 ```
 
@@ -183,4 +202,56 @@ Decodes URL-encoded characters (like %20 for spaces).
 
 #### `parseQueryParams()` ✅
 Extracts and processes query parameters from the URL.
+
+### DoS Protection Functions
+
+#### `initTimeout(time_t seconds)` ✅
+Initializes a timeout for the request processing, after which the request will be considered timed out.
+
+**What it does:**
+- Sets the `_timeout` to the current time + specified seconds
+- Provides protection against slow request attacks
+- Defaults to REQUEST_DEFAULT_HEADER_TIMEOUT (10 seconds)
+
+#### `updateTimeout(time_t seconds)` ✅
+Updates the existing timeout with a new duration, useful when transitioning between parsing phases.
+
+**What it does:**
+- Resets the `_timeout` to the current time + new specified seconds
+- Used to extend timeout for body parsing or handling large uploads
+- Defaults to REQUEST_DEFAULT_BODY_TIMEOUT (30 seconds)
+
+#### `checkTimeout()` ✅
+Checks if the current request has exceeded its allowed processing time.
+
+**What it does:**
+- Compares current time with the stored timeout
+- Returns true if timeout has been exceeded
+- Sets the `_timedOut` flag when a timeout occurs
+- Allows aborting long-running operations
+
+#### `hasTimedOut()` ✅
+Returns whether the request has timed out at any point during processing.
+
+**What it does:**
+- Returns the value of the `_timedOut` flag
+- Used by the server to determine if a 408 Request Timeout response should be sent
+
+#### `setMaxBodySize(size_t size)` ✅
+Sets the maximum allowed size for request bodies.
+
+**What it does:**
+- Updates the `_maxBodySize` field with a custom limit
+- Allows per-route or per-server body size configuration
+- Protects against memory exhaustion attacks
+
+#### `isBodySizeValid()` ✅
+Checks if the Content-Length specified in headers exceeds the maximum allowed body size.
+
+**What it does:**
+- Extracts Content-Length from request headers
+- Compares it against the configured `_maxBodySize`
+- Returns false if the content length exceeds limits
+- Prevents allocation of excessive memory for large requests
+- Used to return 413 Payload Too Large status when needed
 

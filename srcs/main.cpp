@@ -45,6 +45,9 @@ int	main(int ac, char **av)
 		server.loadConfig();
 		server.startServer();
 
+		// ClientRequest request;
+		// request.testClientRequestParsing();
+
 	} catch (const std::exception &e) {
 		std::cerr << BOLD_RED << e.what() << RESET << std::endl;
 		return 1;
