@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/17 13:26:01 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/18 14:26:46 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,7 +17,10 @@ ClientRequest::ClientRequest() :
     _path(""), 
     _httpVersion(""), 
     _body(""),
-    _resourcePath("") 
+    _resourcePath(""),
+    _timeout(0),
+    _maxBodySize(REQUEST_MAX_BODY_SIZE),
+    _timedOut(false)
 {}
 
 ClientRequest::~ClientRequest() {}
@@ -34,6 +37,9 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
         this->_body = other._body;
         this->_formData = other._formData;
         this->_headers = other._headers;
+        this->_timeout = other._timeout;
+        this->_maxBodySize = other._maxBodySize;
+        this->_timedOut = other._timedOut;
     }
     return (*this);
 }
@@ -87,20 +93,33 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
 }
 
 bool ClientRequest::parse( std::string const & rawRequest ) {
+
+    initTimeout(REQUEST_DEFAULT_HEADER_TIMEOUT);
     
     std::istringstream request_stream(rawRequest);
     if (!parseMethod(request_stream))
-        return (false);
+        return false;
     parseHeaders(request_stream);
+
+    if (!isBodySizeValid()) { // 413 - Payload Too Large
+        return false;
+    }
+    
+    if (_headers.find("Content-Length") != _headers.end() || 
+        (_headers.find("Transfer-Encoding") != _headers.end() && 
+         _headers["Transfer-Encoding"] == "chunked")) {
+        updateTimeout(REQUEST_DEFAULT_BODY_TIMEOUT);
+    }
+    
     parseBody(request_stream);
     parseContentType();
     parseQueryParams();
     
-    return (true);
+    return true;
 }
 
-void ClientRequest::parseBody(std::istringstream & request_stream) {
-    // Check if the body is chunked or has Content-Length
+void ClientRequest::parseBody(std::istringstream & request_stream) {    // Check if the body is chunked or has Content-Length
+
     if (_headers.find("Content-Length") != _headers.end()) {
         parseContentLengthBody(request_stream);
     }
@@ -111,14 +130,35 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {
 }
 
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
-    size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
+    size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    char* body_buffer = new char[content_length + 1];
-    request_stream.read(body_buffer, content_length);
-    body_buffer[content_length] = '\0';
-    _body = std::string(body_buffer, content_length);
+    // Additional safety check
+    if (contentLength > _maxBodySize) {
+        return; // Don't process oversized bodies
+    }
     
-    delete[] body_buffer;
+    // Process with a safe buffer size
+    const size_t bufferSize = 8192; // 8KB chunks
+    char buffer[bufferSize];
+    size_t totalRead = 0;
+    _body.clear();
+    
+    while (totalRead < contentLength) {
+        size_t toRead = std::min(bufferSize, contentLength - totalRead);
+        request_stream.read(buffer, toRead);
+        size_t actualRead = request_stream.gcount();
+        
+        if (actualRead == 0) break; // End of stream
+        
+        _body.append(buffer, actualRead);
+        totalRead += actualRead;
+        
+        // Check timeout during long body reading
+        if (checkTimeout()) {
+            _body.clear(); // Discard partial body on timeout
+            return;
+        }
+    }
 }
 
 void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
@@ -465,6 +505,41 @@ void ClientRequest::printRequest() {
     }
 }
 
+void ClientRequest::initTimeout(time_t seconds) {
+    _timeout = time(NULL) + seconds;
+}
+
+void ClientRequest::updateTimeout(time_t seconds) {
+    _timeout = time(NULL) + seconds;
+}
+
+bool ClientRequest::checkTimeout() {
+    if (_timeout == 0) // No timeout set
+        return false;
+        
+    if (time(NULL) > _timeout) {
+        _timedOut = true;
+        return true;
+    }
+    return false;
+}
+
+bool ClientRequest::hasTimedOut() const {
+    return _timedOut;
+}
+
+void ClientRequest::setMaxBodySize(size_t size) {
+    _maxBodySize = size;
+}
+
+bool ClientRequest::isBodySizeValid() const {
+    if (_headers.find("Content-Length") != _headers.end()) {
+        size_t contentLength = strtoul(_headers.at("Content-Length").c_str(), NULL, 10);
+        return contentLength <= _maxBodySize;
+    }
+    return true; // No Content-Length header
+}
+
 void ClientRequest::testClientRequestParsing() {
 
     // std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
@@ -484,30 +559,30 @@ void ClientRequest::testClientRequestParsing() {
     //     request.printRequest();
     // }
     
-    std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
-    std::string testPostRequest = 
-        "POST /submit-form HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: application/x-www-form-urlencoded\r\n"
-        "Content-Length: 29\r\n"
-        "\r\n"
-        "username=john&password=secret";
+    // std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
+    // std::string testPostRequest = 
+    //     "POST /submit-form HTTP/1.1\r\n"
+    //     "Host: localhost:8080\r\n"
+    //     "Content-Type: application/x-www-form-urlencoded\r\n"
+    //     "Content-Length: 29\r\n"
+    //     "\r\n"
+    //     "username=john&password=secret";
     
-    ClientRequest postRequest;
-    bool postParseSuccess = postRequest.parse(testPostRequest);
+    // ClientRequest postRequest;
+    // bool postParseSuccess = postRequest.parse(testPostRequest);
     
     
-    std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (postParseSuccess) {
-        postRequest.printRequest();
+    // std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    // if (postParseSuccess) {
+    //     postRequest.printRequest();
         
-        std::cout << FYEL("_formData:") << std::endl;
-        std::map<std::string, std::string> formData = postRequest._formData;
-        for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-            it != formData.end(); ++it) {
-            std::cout << "  " << it->first << ": " << it->second << std::endl;
-        }
-    }
+    //     std::cout << FYEL("_formData:") << std::endl;
+    //     std::map<std::string, std::string> formData = postRequest._formData;
+    //     for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
+    //         it != formData.end(); ++it) {
+    //         std::cout << "  " << it->first << ": " << it->second << std::endl;
+    //     }
+    // }
 
     // std::cout << FBLU("\n======== Testing Form URL Encoded Parsing ========\n") << std::endl;
     // std::string testFormUrlEncodedRequest = 
@@ -628,5 +703,21 @@ void ClientRequest::testClientRequestParsing() {
     // if (urlParseSuccess) {
     //     urlRequest.printRequest();
     // }
+
+    std::cout << FBLU("\n======== Testing DoS Protection ========\n") << std::endl;
+    
+    std::string largeBodyTestRequest = 
+        "POST /upload HTTP/1.1\r\n"
+        "Host: localhost:8080\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 104857600\r\n" // 100MB (should exceed default limit)
+        "\r\n";
+    
+    ClientRequest largeBodyRequest;
+    bool largeBodyResult = largeBodyRequest.parse(largeBodyTestRequest);
+    
+    std::cout << "Large body protection test: " << 
+        (largeBodyResult ? FRED("FAILED - Large body allowed") : FGRN("SUCCESS - Large body rejected")) << std::endl;
+    
 }
 
