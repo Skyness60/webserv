@@ -6,7 +6,7 @@
 /*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/11 15:32:55 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/17 13:26:08 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,6 +62,7 @@ class ClientRequest {
     // Getters
         std::string         getMethod()         const;
         std::string         getPath()           const;
+		std::map<std::string, std::string> getFormData() const;
         std::string         getResourcePath()   const;
         std::string         getHttpVersion()    const;
         std::string         getBody()           const;

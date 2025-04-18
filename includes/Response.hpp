@@ -1,23 +1,24 @@
 #pragma once
 
 #include "Includes.hpp"
+#include "Config.hpp" // Inclure la définition complète ici
+#include "Response.hpp"
+#include "ClientRequest.hpp"
 
 class Config; // Forward declaration of Config class
-#include "Response.hpp"
-#include "Config.hpp" // Inclure la définition complète ici
+class ClientRequest; 
+
 
 class Response{
 	private :
 		int _client_fd;
-		std::string _path;
-		std::string _method;
 		Config	&_config;
 		std::pair<std::string, void (Response::*)()> _func[3];
-        std::map<std::string, std::string>  _headers;
+		ClientRequest &_request;
 		int _indexServ;
 		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
 	public :
-		Response(int fd, std::string file, std::string cmd, Config &serv_conf, std::map<std::string, std::string> headers, int index);
+		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
 		~Response();
 		Response(const Response &other);
 		Response &operator=(const Response &other);
@@ -25,6 +26,5 @@ class Response{
 		void dealPost();
 		void dealDelete();
 		void oriente();
-		void bad_method();
-		bool	checkPost(std::string postUrl);
+		bool checkPost(std::string postUrl);
 };

@@ -3,8 +3,6 @@
 #include "EpollManager.hpp"
 #include "SignalHandler.hpp"
 
-// Variable globale pour arrêter le serveur
-volatile bool stopServer = false;
 
 // Constructeur qui initialise le gestionnaire de serveur avec un fichier de configuration
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename) {
@@ -35,13 +33,6 @@ ServerManager::~ServerManager() {
 void ServerManager::loadConfig() {
     // Cette fonction est actuellement désactivée (code commenté)
     // Elle pourrait lire et afficher le contenu du fichier de configuration
-}
-
-// Gestionnaire de signaux pour arrêter le serveur proprement
-void signalHandler(int signum) {
-    if (signum == SIGINT || signum == SIGTERM) {
-        stopServer = true;
-    }
 }
 
 // Fonction principale pour démarrer le serveur
@@ -102,16 +93,16 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     } else {
-        std::string rawRequest(buffer, valread);
+		std::string rawRequest(buffer, valread);
+		std::cout << rawRequest << std::endl;
         ClientRequest request;
         if (request.parse(rawRequest)) {
             std::string requestedPath = request.getResourcePath();
             std::string method = request.getMethod();
             std::map<std::string, std::string> headers = request.getHeaders();
-            int serverIndex = 0; // Supposons un seul serveur pour l'instant
-
-            // Utilisation de Response pour traiter la requête
-            Response response(client_fd, requestedPath, method, _config, headers, serverIndex);
+            int serverIndex = 0;
+            // Use Response to handle the request
+            Response response(client_fd, request, _config, serverIndex);
             response.oriente();
         } else {
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
@@ -155,4 +146,9 @@ int ServerManager::getServersCount() {
 // Récupère les noms des locations pour un serveur donné
 std::vector<std::string> ServerManager::getLocationName(int index) {
     return _config.getLocationName(index);
+}
+
+// Récupère le nombre de locations pour un serveur donné
+int ServerManager::getLocationCount(int serverIndex) {
+	return _config.getLocationCount(serverIndex);
 }

@@ -6,7 +6,7 @@
 /*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/11 17:10:00 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/17 13:26:01 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,6 +45,7 @@ std::string         ClientRequest::getBody() const { return _body; }
 std::map<std::string, std::string> ClientRequest::getHeaders() const { return _headers; }
 std::string ClientRequest::getResourcePath() const { return _resourcePath; }
 std::map<std::string, std::string> ClientRequest::getQueryParams() const { return _queryParams; }
+std::map<std::string, std::string> ClientRequest::getFormData() const { return _formData; }
 
 //--------------------------------------------------------------Methods
 
