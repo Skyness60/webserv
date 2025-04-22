@@ -16,7 +16,7 @@ class Response{
 		std::pair<std::string, void (Response::*)()> _func[3];
 		ClientRequest &_request;
 		int _indexServ;
-		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
+		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
 		~Response();
