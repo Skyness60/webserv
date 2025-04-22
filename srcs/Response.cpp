@@ -91,52 +91,39 @@ void Response::dealDelete() {
     }
 }
 
-bool	Response::checkPost(std::string postUrl){
-	std::vector<std::string> vector = this->_config.getLocationName(_indexServ);
-	for (unsigned long i = 0; i < vector.size(); i++)
-	if (!vector[i].find(postUrl))
-	return 1;
-	return 0;
-}
-
-
-static std::string getPostUrl(std::map <std::string, std::string> headers){
-	for (std::map<std::string, std::string>::iterator it = headers.begin(); it != headers.end(); it++){
-		if (!it->first.compare("POST"))
-			return (it->second);
-	}
-	return "";
-}
-
-
 void Response::dealPost(){
-	std::string postUrl = getPostUrl(this->_request.getHeaders());
-	if (!checkPost(postUrl)){
-		std::ifstream in(("../www/error405.html"), std::ios::binary);
-		std::string body ((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		safeSend(405, "Method Not Allowed", body);
-	}
-	else {
-		std::ofstream out ("playlist.txt");
-		if (out.is_open()){
-			if (this->_request.getHeaders()["Content-Type"] == "application/x-www-form-urlencoded"){
-				std::map<std::string, std::string> formData = this->_request.getFormData();
-				for (std::map<std::string, std::string>::iterator it = formData.begin(); it != formData.end(); it++){
-					out << it->first << " : " << it->second << std::endl;
-				}
-			}
-			else
-				out << this->_request.getBody();
-			out.close();
+	std::string postUrl = _request.getPath();
+
+	std::string fileName;
+	for (size_t i = 0; postUrl[i] != '\0'; i++){
+		char c = postUrl[i];
+		if (isalnum(c) || c == '_' || c == '-'){
+			fileName += c;
 		}
 		else {
-			std::string body = "<h>Failed to open file for writing.</h>";
-			safeSend(500, "Internal Server Error", body, "text/html");
-			return ;
+			fileName += '_';
 		}
-		std::string body = "<h>File created successfully.</h>";
-		safeSend(201, "OK", body, "text/html");
 	}
+	std::string fullPath = "./www/" + fileName + ".txt";
+	std::ofstream out (fullPath.c_str());
+	if (out.is_open()){
+		if (this->_request.getHeaders()["Content-Type"] == "application/x-www-form-urlencoded"){
+			std::map<std::string, std::string> formData = this->_request.getFormData();
+			for (std::map<std::string, std::string>::iterator it = formData.begin(); it != formData.end(); it++){
+				out << it->first << " : " << it->second << std::endl;
+			}
+		}
+		else
+			out << this->_request.getBody();
+		out.close();
+	}
+	else {
+		std::string body = "<h>Failed to open file for writing.</h>";
+		safeSend(500, "Internal Server Error", body, "text/html");
+		return ;
+	}
+	std::string body = "<h>File created successfully.</h>";
+	safeSend(201, "OK", body, "text/html");
 }
 
 void Response::safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType) {
@@ -167,5 +154,11 @@ void Response::oriente() {
             return (this->*(_func[i].second))();
         }
     }
-	safeSend(405, "Method Not Allowed", "The requested method is not supported.");
+	std::ifstream file("./www/405.html");
+	if (!file.is_open()) {
+		safeSend(500, "Internal Server Error", "<h>Error page path is a directory.</h>", "text/html");
+		return;
+	}
+	std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	safeSend(405, "Method Not Allowed", body.c_str(), "text/html");
 }
