@@ -1,5 +1,6 @@
 #include "ServerManager.hpp"
 #include "ClientRequest.hpp"
+#include "DdosProtection.hpp"
 
 static bool checkConf(char *av)
 {
@@ -47,6 +48,8 @@ int	main(int ac, char **av)
 
 		// ClientRequest request;
 		// request.testClientRequestParsing();
+		// DdosProtection ddosProtection(60, 100, 300);
+        // ddosProtection.testDdosProtection();
 
 	} catch (const std::exception &e) {
 		std::cerr << BOLD_RED << e.what() << RESET << std::endl;
