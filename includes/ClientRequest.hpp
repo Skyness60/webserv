@@ -3,16 +3,18 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/17 13:26:08 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/22 13:02:39 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
 #include "Includes.hpp"
+
+class DdosProtection;
 
 class ClientRequest {
     
@@ -26,7 +28,6 @@ class ClientRequest {
         std::map<std::string, std::string>  _headers;
         std::map<std::string, std::string>  _queryParams;  
         std::string         _resourcePath;                 
-       
 
     public:
     
@@ -35,7 +36,7 @@ class ClientRequest {
         ClientRequest & operator=( ClientRequest const & other );
         ~ClientRequest();
 
-        bool                parse( std::string const & rawRequest);
+        bool                parse( std::string const & rawRequest, DdosProtection* ddosProtector);
         bool                parseMethod( std::istringstream & stream );
         void                parseHeaders( std::istringstream & stream );
         void                parseBody( std::istringstream & request_stream );

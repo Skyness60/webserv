@@ -14,7 +14,8 @@ SRC = srcs/main.cpp \
 		srcs/SignalHandler.cpp \
 		srcs/SocketManager.cpp \
 		srcs/EpollManager.cpp \
-		srcs/CGIManager.cpp
+		srcs/CGIManager.cpp	\
+		srcs/DdosProtection.cpp \
 
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 

@@ -2,7 +2,7 @@
 #include "SocketManager.hpp"
 #include "EpollManager.hpp"
 #include "SignalHandler.hpp"
-
+#include "DdosProtection.hpp"
 
 // Constructeur qui initialise le gestionnaire de serveur avec un fichier de configuration
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename) {
@@ -87,6 +87,9 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 // Gère une requête client
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
     char buffer[1024] = {0};
+    static DdosProtection ddosProtector(DDOS_DEFAULT_RATE_WINDOW, 
+                                        DDOS_DEFAULT_MAX_REQUESTS, 
+                                        DDOS_DEFAULT_BLOCK_DURATION);
     int valread = read(client_fd, buffer, sizeof(buffer));
     if (valread <= 0) {
         std::cout << "Client déconnecté: " << client_fd << std::endl;
@@ -96,7 +99,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 		std::string rawRequest(buffer, valread);
 		std::cout << rawRequest << std::endl;
         ClientRequest request;
-        if (request.parse(rawRequest)) {
+        if (request.parse(rawRequest, &ddosProtector)) {
             std::string requestedPath = request.getResourcePath();
             std::string method = request.getMethod();
             std::map<std::string, std::string> headers = request.getHeaders();

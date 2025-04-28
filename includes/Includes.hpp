@@ -34,6 +34,7 @@
 #include <algorithm>			// std::find
 #include <signal.h>				// sigaction
 #include <csignal>				// sigaction
-#include <functional>			// For std::function
 #include "CGIManager.hpp"		// CGIManager class
+#include <functional>           // std::function
+#include <ctime>
 //#include <sys/event.h>		// for MAC

@@ -3,21 +3,22 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/17 13:26:01 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/22 12:47:55 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ClientRequest.hpp"
+#include "DdosProtection.hpp"
 
 ClientRequest::ClientRequest() : 
     _method(""), 
     _path(""), 
     _httpVersion(""), 
     _body(""),
-    _resourcePath("") 
+    _resourcePath("")
 {}
 
 ClientRequest::~ClientRequest() {}
@@ -86,12 +87,26 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
     }
 }
 
-bool ClientRequest::parse( std::string const & rawRequest ) {
-    
+bool ClientRequest::parse( std::string const & rawRequest, DdosProtection* ddosProtector ) {
+
+    if (ddosProtector) {
+        ddosProtector->initTimeout();
+    }
+
     std::istringstream request_stream(rawRequest);
     if (!parseMethod(request_stream))
         return (false);
+    
     parseHeaders(request_stream);
+
+    if (ddosProtector && !ddosProtector->isBodySizeValid(_headers, ddosProtector->getMaxBodySize())) {
+        return (false);
+    }
+
+    if (ddosProtector) {
+        ddosProtector->updateTimeout();
+    }
+    
     parseBody(request_stream);
     parseContentType();
     parseQueryParams();
@@ -99,8 +114,8 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
     return (true);
 }
 
-void ClientRequest::parseBody(std::istringstream & request_stream) {
-    // Check if the body is chunked or has Content-Length
+void ClientRequest::parseBody(std::istringstream & request_stream) { 
+
     if (_headers.find("Content-Length") != _headers.end()) {
         parseContentLengthBody(request_stream);
     }
@@ -111,14 +126,24 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {
 }
 
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
-    size_t content_length = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
+    size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    char* body_buffer = new char[content_length + 1];
-    request_stream.read(body_buffer, content_length);
-    body_buffer[content_length] = '\0';
-    _body = std::string(body_buffer, content_length);
+    const size_t bufferSize = 8192; // 8KB chunks
+    char buffer[bufferSize];
+    size_t totalRead = 0;
+    _body.clear();
     
-    delete[] body_buffer;
+    while (totalRead < contentLength) {
+        size_t toRead = std::min(bufferSize, contentLength - totalRead);
+        request_stream.read(buffer, toRead);
+        size_t actualRead = request_stream.gcount();
+        
+        if (actualRead == 0)
+            break;
+        
+        _body.append(buffer, actualRead);
+        totalRead += actualRead;
+    }
 }
 
 void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
@@ -217,7 +242,7 @@ void ClientRequest::parseJsonContent( const std::string & jsonContent, std::map<
             currentValue += c;
         }
     }
-    if (!currentKey.empty()) { // Handle the last key-value pair
+    if (!currentKey.empty()) {
         jsonData[currentKey] = currentValue;
     }
     cleanupJsonValues(jsonData);
@@ -484,30 +509,30 @@ void ClientRequest::testClientRequestParsing() {
     //     request.printRequest();
     // }
     
-    std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
-    std::string testPostRequest = 
-        "POST /submit-form HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: application/x-www-form-urlencoded\r\n"
-        "Content-Length: 29\r\n"
-        "\r\n"
-        "username=john&password=secret";
+    // std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
+    // std::string testPostRequest = 
+    //     "POST /submit-form HTTP/1.1\r\n"
+    //     "Host: localhost:8080\r\n"
+    //     "Content-Type: application/x-www-form-urlencoded\r\n"
+    //     "Content-Length: 29\r\n"
+    //     "\r\n"
+    //     "username=john&password=secret";
     
-    ClientRequest postRequest;
-    bool postParseSuccess = postRequest.parse(testPostRequest);
+    // ClientRequest postRequest;
+    // bool postParseSuccess = postRequest.parse(testPostRequest);
     
     
-    std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    if (postParseSuccess) {
-        postRequest.printRequest();
+    // std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
+    // if (postParseSuccess) {
+    //     postRequest.printRequest();
         
-        std::cout << FYEL("_formData:") << std::endl;
-        std::map<std::string, std::string> formData = postRequest._formData;
-        for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-            it != formData.end(); ++it) {
-            std::cout << "  " << it->first << ": " << it->second << std::endl;
-        }
-    }
+    //     std::cout << FYEL("_formData:") << std::endl;
+    //     std::map<std::string, std::string> formData = postRequest._formData;
+    //     for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
+    //         it != formData.end(); ++it) {
+    //         std::cout << "  " << it->first << ": " << it->second << std::endl;
+    //     }
+    // }
 
     // std::cout << FBLU("\n======== Testing Form URL Encoded Parsing ========\n") << std::endl;
     // std::string testFormUrlEncodedRequest = 
@@ -628,5 +653,48 @@ void ClientRequest::testClientRequestParsing() {
     // if (urlParseSuccess) {
     //     urlRequest.printRequest();
     // }
+
+    // Test DoS Protection using DdosProtection class instead of inline code
+    std::cout << FBLU("\n======== Testing DoS Protection ========\n") << std::endl;
+    
+    // Create an instance of DdosProtection for testing
+    DdosProtection ddosProtector(60, 100, 300);
+    
+    std::string largeBodyTestRequest = 
+        "POST /upload HTTP/1.1\r\n"
+        "Host: localhost:8080\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 104857600\r\n" // 100MB (should exceed default limit)
+        "\r\n";
+    
+    ClientRequest largeBodyRequest;
+    bool largeBodyResult = largeBodyRequest.parse(largeBodyTestRequest, &ddosProtector);
+    
+    std::cout << "Large body protection test: " << 
+        (largeBodyResult ? FRED("FAILED - Large body allowed") : FGRN("SUCCESS - Large body rejected")) << std::endl;
+    
+    // Test rate limiting
+    std::cout << FBLU("\n======== Testing Rate Limiting ========\n") << std::endl;
+    
+    // Simulate multiple requests from same IP
+    std::string clientIp = "192.168.1.100";
+    
+    // Configure with strict rate limiting for testing
+    ddosProtector.configure(1, 3, 10); // 3 requests per second, 10 second block
+    
+    for (int i = 0; i < 5; i++) {
+        // Track a request
+        ddosProtector.trackClientRequest(clientIp);
+        
+        // Check if blocked after tracking
+        bool blocked = ddosProtector.isClientBlocked(clientIp);
+        
+        std::cout << "Request " << (i+1) << ": " << 
+            (blocked ? FRED("BLOCKED") : FGRN("ALLOWED")) << std::endl;
+    }
+    
+    // Print DDoS protection stats
+    std::cout << FBLU("\n======== DDoS Protection Statistics ========\n") << std::endl;
+    std::cout << ddosProtector.getStats() << std::endl;
 }
 
