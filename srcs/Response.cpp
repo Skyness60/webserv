@@ -37,18 +37,21 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-    std::string fullPath = "./www" + this->_request.getPath();
+    std::string fullPath = this->_config.getConfigValue(_indexServ, "root") + this->_request.getPath();
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
         std::string indexFile = _config.getConfigValue(_indexServ, "index");
         fullPath += "/" + indexFile;
     }
-
 	// Ici c'est la ou j'appelerais la fonction CGI (c'est pas encore fait et c'est pas une ia)
-	CGIManager cgi(_config, _indexServ);
-	if (isCGI(cgi)) {
-		std::cout << "coucou c'est moi cgi" << std::endl;
+	if (isCGI(this->_request.getPath())) {
+		CGIManager cgi(_config, _indexServ);
+		std::cout << "CGI path: " << cgi.getPath() << std::endl;
+		std::cout << "CGI extension: " << cgi.getExtension() << std::endl;
+		std::cout << "CGI root: " << cgi.getRoot() << std::endl;
+		cgi.executeCGI(_client_fd, this->_request.getMethod());
+		return;
 	}
 
     std::ifstream file(fullPath.c_str(), std::ios::binary);
@@ -169,14 +172,39 @@ void Response::oriente() {
 	safeSend(405, "Method Not Allowed", body.c_str(), "text/html");
 }
 
-bool Response::isCGI(CGIManager &cgi) {
-	std::string path = cgi.getPath();
-	std::string extension = cgi.getExtension();
-	std::string root = cgi.getRoot();
-
-	if (path.empty() || extension.empty() || root.empty()) {
-		return false;
+bool Response::isCGI(std::string path) {\
+	for (size_t i = 0; i < this->_config.getLocationName(_indexServ).size(); i++) {
+		std::string location = this->_config.getLocationName(_indexServ)[i];
+		location = location.substr(9);
+		if (path.find(location) != std::string::npos) {
+			if (path.find(".py") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".pl") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".php") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".rb") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".cgi") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".sh") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".js") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".jsp") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".asp") != std::string::npos) {
+				return true;
+			}
+		}
 	}
-	else 
-		return true;
+	return false;
 }

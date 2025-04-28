@@ -52,11 +52,43 @@ CGIManager &CGIManager::operator=(const CGIManager &copy) {
 
 CGIManager::~CGIManager() {}
 
-void CGIManager::executeCGI(int client_fd, const std::string &method, const std::string &queryString) {
+void CGIManager::executeCGI(int client_fd, const std::string &method) {
 	(void)client_fd;
 	(void)method;
-	(void)queryString;
-		
+	int pipe_fd[2];
+	if (pipe(pipe_fd) == -1) {
+		perror("pipe");
+		return;
+	}
+	pid_t pid = fork();
+	if (pid == -1) {
+		perror("fork");
+		return;
+	}
+	if (pid == 0) {
+		close(pipe_fd[0]);
+		dup2(pipe_fd[1], STDOUT_FILENO);
+		close(pipe_fd[1]);
+		execve(_path.c_str(), NULL, NULL);
+		perror("execl");
+		exit(EXIT_FAILURE);
+	}
+	else{
+		close(pipe_fd[1]);
+		char buffer[1024];
+		ssize_t bytesRead;
+		while ((bytesRead = read(pipe_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
+			buffer[bytesRead] = '\0';
+			std::cout << buffer;
+		}
+		if (bytesRead == -1) {
+			perror("read");
+		}
+		close(pipe_fd[0]);
+		int status;
+		waitpid(pid, &status, 0);
+		send(client_fd, buffer, bytesRead, MSG_NOSIGNAL);
+	}
 }
 
 std::string CGIManager::getPath() const {

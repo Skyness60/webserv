@@ -18,7 +18,7 @@ class Response{
 		ClientRequest &_request;
 		int _indexServ;
 		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
-		bool isCGI(CGIManager &cgi);
+		bool isCGI(std::string path);
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
