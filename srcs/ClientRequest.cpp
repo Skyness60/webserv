@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
+/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/18 14:26:46 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/28 22:01:12 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -186,35 +186,65 @@ void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
 
 void ClientRequest::parseContentType() {
     
-    if (_headers.find("Content-Type") == _headers.end())
+    //std::cout << "DEBUG: parseContentType() called" << std::endl;
+    if (_headers.find("Content-Type") == _headers.end()) {
+        std::cout << "DEBUG: No Content-Type header found" << std::endl;
         return;
+    }
         
     std::string contentType = _headers["Content-Type"];
+    //std::cout << "DEBUG: Content-Type: " << contentType << std::endl;
+    
     if (contentType.find("application/x-www-form-urlencoded") != std::string::npos) {
+        //std::cout << "DEBUG: Parsing as form-urlencoded" << std::endl;
         parseFormUrlEncoded();
     }
     else if (contentType.find("multipart/form-data") != std::string::npos) {
+        //std::cout << "DEBUG: Parsing as multipart form data" << std::endl;
         parseMultipartFormData();
     }
     else if (contentType.find("application/json") != std::string::npos) {
+        //std::cout << "DEBUG: Parsing as JSON" << std::endl;
         parseJson();
     }
     else if (contentType.find("text/plain") != std::string::npos) {
+        //std::cout << "DEBUG: Parsing as plain text" << std::endl;
         parseText();
+    }
+    else {
+        std::cout << "DEBUG: Content-Type not recognized, treating as raw body" << std::endl;
     }
 }
 
 void ClientRequest::parseJson() {
+    //std::cout << "DEBUG: parseJson() called" << std::endl;
     std::map<std::string, std::string> jsonData;
     std::string jsonStr = _body;
+    
+    //std::cout << "DEBUG: JSON body length: " << jsonStr.length() << std::endl;
+    //std::cout << "DEBUG: JSON body content: " << jsonStr << std::endl;
     
     size_t start = jsonStr.find('{');
     size_t end = jsonStr.rfind('}');
     
+    //std::cout << "DEBUG: JSON start position: " << start << ", end position: " << end << std::endl;
+    
     if (start != std::string::npos && end != std::string::npos && start < end) {
+        //std::cout << "DEBUG: Valid JSON structure found, extracting content" << std::endl;
         jsonStr = jsonStr.substr(start + 1, end - start - 1);
+        //std::cout << "DEBUG: Extracted JSON content: " << jsonStr << std::endl;
         parseJsonContent(jsonStr, jsonData);
         _formData = jsonData;
+        //std::cout << "DEBUG: JSON parsing completed, extracted " << jsonData.size() << " key-value pairs" << std::endl;
+    }
+    else {
+        //std::cout << "DEBUG: Invalid JSON structure! start=" << start << ", end=" << end << std::endl;
+        if (start == std::string::npos)
+            std::cout << "DEBUG: No opening bracket found" << std::endl;
+        if (end == std::string::npos)
+            std::cout << "DEBUG: No closing bracket found" << std::endl;
+        if (start >= end && start != std::string::npos && end != std::string::npos) 
+            std::cout << "DEBUG: Opening bracket after closing bracket" << std::endl;
     }
 }
 
@@ -257,7 +287,7 @@ void ClientRequest::parseJsonContent( const std::string & jsonContent, std::map<
             currentValue += c;
         }
     }
-    if (!currentKey.empty()) { // Handle the last key-value pair
+    if (!currentKey.empty()) {
         jsonData[currentKey] = currentValue;
     }
     cleanupJsonValues(jsonData);
@@ -266,10 +296,18 @@ void ClientRequest::parseJsonContent( const std::string & jsonContent, std::map<
 void ClientRequest::cleanupJsonValues( std::map<std::string, std::string>& jsonData ) {
     for (std::map<std::string, std::string>::iterator it = jsonData.begin(); it != jsonData.end(); ++it) {
         std::string& value = it->second;
-        value = value.substr(value.find_first_not_of(" \t\""));
+        
+        size_t start = value.find_first_not_of(" \t\"");
+        if (start == std::string::npos) {
+            value = "";
+            continue;
+        }
+        
         size_t end = value.find_last_not_of(" \t\"");
-        if (end != std::string::npos) {
-            value = value.substr(0, end + 1);
+        if (end != std::string::npos && end >= start) {
+            value = value.substr(start, end - start + 1);
+        } else {
+            value = "";
         }
     }
 }
@@ -300,7 +338,7 @@ void ClientRequest::parseText() {
 void ClientRequest::parseFormUrlEncoded() {
     std::map<std::string, std::string> formData;
     std::string body = _body;
-    std::vector<std::string> pairs = splitFormData(body);// Split by '&' to get key-value pairs
+    std::vector<std::string> pairs = splitFormData(body);
     
     for (size_t i = 0; i < pairs.size(); i++) {
         processFormDataPair(pairs[i], formData);
@@ -321,7 +359,7 @@ std::vector<std::string> ClientRequest::splitFormData( const std::string & data 
         result.push_back(data.substr(start, end - start));
         start = end + 1;
     }
-    if (start < data.length()) {// Add the last part
+    if (start < data.length()) {
         result.push_back(data.substr(start));
     }
     
@@ -334,11 +372,11 @@ void ClientRequest::processFormDataPair(const std::string& pair, std::map<std::s
     if (equalPos != std::string::npos) {
         std::string key = pair.substr(0, equalPos);
         std::string value = pair.substr(equalPos + 1);
-        key = urlDecode(key);// URL decode key and value
+        key = urlDecode(key);
         value = urlDecode(value);
         formData[key] = value;
     }
-    else if (!pair.empty()) {// Handle case where there's a key but no value
+    else if (!pair.empty()) {
         formData[urlDecode(pair)] = "";
     }
 }
@@ -372,7 +410,7 @@ void ClientRequest::processMultipartParts(const std::string& boundary) {
         }
         partStart += boundary.length();
         if (_body.substr(partStart, 2) == "--") {
-            break; // End boundary marker
+            break; 
         }
         if (_body.substr(partStart, 2) == "\r\n") {
             partStart += 2;
@@ -537,7 +575,7 @@ bool ClientRequest::isBodySizeValid() const {
         size_t contentLength = strtoul(_headers.at("Content-Length").c_str(), NULL, 10);
         return contentLength <= _maxBodySize;
     }
-    return true; // No Content-Length header
+    return true;
 }
 
 void ClientRequest::testClientRequestParsing() {
@@ -704,7 +742,7 @@ void ClientRequest::testClientRequestParsing() {
     //     urlRequest.printRequest();
     // }
 
-    std::cout << FBLU("\n======== Testing DoS Protection ========\n") << std::endl;
+    std::cout << FBLU("\n======== Testing DDoS Protection ========\n") << std::endl;
     
     std::string largeBodyTestRequest = 
         "POST /upload HTTP/1.1\r\n"

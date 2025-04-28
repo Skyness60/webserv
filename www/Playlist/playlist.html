@@ -80,7 +80,6 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // DOM Elements
             const songSelect = document.getElementById('songInput');
             const customSongInput = document.getElementById('customSongInput');
             const addButton = document.getElementById('addBtn');
@@ -92,18 +91,14 @@
             const showPlaylistBtn = document.getElementById('showPlaylistBtn');
             const deletePlaylistBtn = document.getElementById('deletePlaylistBtn');
             
-            // Single playlist ID
             const PLAYLIST_ID = 'britney_playlist';
             
-            // Create glitter particles
             for (let i = 0; i < 50; i++) {
                 createGlitterParticle();
             }
             
-            // Load the playlist
             loadPlaylist(PLAYLIST_ID);
             
-            // Event Listeners
             songSelect.addEventListener('change', function() {
                 if (songSelect.value === 'custom') {
                     customSongInput.style.display = 'block';
@@ -126,44 +121,35 @@
                 deletePlaylistFile(PLAYLIST_ID);
             });
             
-            // Functions
             function addSong() {
-                // Check if we already have 5 songs
                 const currentSongs = document.querySelectorAll('.song-item');
                 if (currentSongs.length >= 5) {
                     showStatus('You can only add up to 5 songs to your playlist!', 'error');
                     return;
                 }
                 
-                // Get the song value
                 let songValue = songSelect.value;
                 if (customSongInput.style.display === 'block') {
                     songValue = customSongInput.value;
-                    // Reset to select after adding
                     customSongInput.value = '';
                     customSongInput.style.display = 'none';
                     songSelect.style.display = 'block';
                     songSelect.value = '';
                 }
                 
-                // Validate input
                 if (!songValue) {
                     showStatus('Please select or enter a Britney song!', 'error');
                     return;
                 }
                 
-                // Create and add song item
                 const songItem = createSongElement(songValue);
                 
-                // Remove empty message if it exists
                 const emptyMessage = document.querySelector('.empty-message');
                 if (emptyMessage) {
                     emptyMessage.remove();
                 }
                 
                 songsContainer.appendChild(songItem);
-                
-                // Save playlist to localStorage
                 savePlaylist(PLAYLIST_ID);
                 showStatus(`"${songValue}" added to your playlist! 🎵`, 'success');
             }
@@ -197,7 +183,6 @@
                     const songText = songItem.querySelector('.song-title').textContent.replace('🎵 ', '');
                     songItem.remove();
                     
-                    // If no songs left, add empty message
                     if (songsContainer.children.length === 0) {
                         const emptyMessage = document.createElement('div');
                         emptyMessage.className = 'empty-message';
@@ -205,7 +190,6 @@
                         songsContainer.appendChild(emptyMessage);
                     }
                     
-                    // Save playlist to localStorage
                     savePlaylist(PLAYLIST_ID);
                     showStatus(`"${songText}" removed from your playlist`, 'info');
                 });
@@ -217,7 +201,6 @@
                 songItem.appendChild(songTitle);
                 songItem.appendChild(songControls);
                 
-                // Drag and drop functionality
                 songItem.addEventListener('dragstart', function(e) {
                     e.dataTransfer.setData('text/plain', songName);
                     this.classList.add('dragging');
@@ -254,7 +237,6 @@
                         } else {
                             songsContainer.insertBefore(draggedItem, this.nextSibling);
                         }
-                                 // Save playlist to localStorage
                 savePlaylist(PLAYLIST_ID);
                 showStatus('Playlist order updated! ✨', 'info');
                     }
@@ -271,7 +253,6 @@
                     songsContainer.insertBefore(songItem.nextElementSibling, songItem);
                     showStatus('Song moved down! ⬇️', 'info');
                 }
-                // Save playlist to localStorage
                 savePlaylist(PLAYLIST_ID);
             }
             
@@ -283,7 +264,6 @@
                     emptyMessage.textContent = 'Your playlist is empty. Add up to 5 Britney songs!';
                     songsContainer.appendChild(emptyMessage);
                     
-                    // Delete playlist from localStorage
                     deletePlaylist(PLAYLIST_ID);
                     showStatus('Playlist cleared! 🗑️', 'warning');
                 }
@@ -293,7 +273,6 @@
                 const particle = document.createElement('div');
                 particle.className = 'glitter-particle';
                 
-                // Random position and animation delay
                 const posX = Math.random() * 100;
                 particle.style.left = `${posX}%`;
                 particle.style.top = `-5px`;
@@ -301,18 +280,15 @@
                 
                 glitterContainer.appendChild(particle);
                 
-                // Remove and recreate particle after animation
                 setTimeout(() => {
                     particle.remove();
                     createGlitterParticle();
                 }, 3000 + (Math.random() * 2000));
             }
             
-            // Show status message function
             function showStatus(message, type = 'info') {
                 statusMessage.textContent = message;
                 
-                // Set color based on message type
                 if (type === 'error') {
                     statusMessage.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
                 } else if (type === 'success') {
@@ -330,7 +306,6 @@
                 }, 3000);
             }
             
-            // Show playlist contents in a nice format
             function showPlaylistContents() {
                 const songs = Array.from(document.querySelectorAll('.song-item')).map(
                     item => item.querySelector('.song-title').textContent.replace('🎵 ', '')
@@ -345,7 +320,6 @@
                 alert(`Your Britney Playlist:\n\n${songList}`);
             }
             
-            // localStorage-based playlist management functions
             function savePlaylist(playlistId) {
                 const songs = Array.from(document.querySelectorAll('.song-item')).map(
                     item => item.querySelector('.song-title').textContent.replace('🎵 ', '')
@@ -357,7 +331,6 @@
                 };
                 
                 try {
-                    // Save to localStorage
                     localStorage.setItem(playlistId, JSON.stringify(playlistData));
                     console.log(`Playlist saved to localStorage: ${playlistId}`, playlistData);
                 } catch (error) {
@@ -368,17 +341,14 @@
             
             function loadPlaylist(playlistId) {
                 try {
-                    // Load from localStorage
                     const savedPlaylist = localStorage.getItem(playlistId);
                     
-                    // Clear current playlist display
                     songsContainer.innerHTML = '';
                     
                     if (savedPlaylist) {
                         const data = JSON.parse(savedPlaylist);
                         
                         if (data && data.songs && data.songs.length > 0) {
-                            // Add songs to the UI
                             data.songs.forEach(song => {
                                 const songItem = createSongElement(song);
                                 songsContainer.appendChild(songItem);
@@ -386,14 +356,12 @@
                             
                             console.log(`Playlist loaded from localStorage: ${playlistId}`, data);
                         } else {
-                            // Empty playlist
                             const emptyMessage = document.createElement('div');
                             emptyMessage.className = 'empty-message';
                             emptyMessage.textContent = 'Your playlist is empty. Add up to 5 Britney songs!';
                             songsContainer.appendChild(emptyMessage);
                         }
                     } else {
-                        // No playlist saved yet
                         const emptyMessage = document.createElement('div');
                         emptyMessage.className = 'empty-message';
                         emptyMessage.textContent = 'Your playlist is empty. Add up to 5 Britney songs!';
@@ -403,7 +371,6 @@
                     console.error('Error loading playlist from localStorage:', error);
                     showStatus('Error loading playlist!', 'error');
                     
-                    // Display empty message on error
                     const emptyMessage = document.createElement('div');
                     emptyMessage.className = 'empty-message';
                     emptyMessage.textContent = 'Your playlist is empty. Add up to 5 Britney songs!';
@@ -413,7 +380,6 @@
             
             function deletePlaylist(playlistId) {
                 try {
-                    // Remove from localStorage
                     localStorage.removeItem(playlistId);
                     console.log(`Playlist deleted from localStorage: ${playlistId}`);
                 } catch (error) {
@@ -422,39 +388,58 @@
                 }
             }
             
-            // Save playlist to a JSON file on the server
             function savePlaylistToFile(playlistId) {
                 try {
-                    // Get the current playlist data
                     const playlistData = JSON.parse(localStorage.getItem(playlistId) || '{"name":"My Britney Playlist","songs":[]}');
                     
-                    // Update timestamp
                     playlistData.createdAt = new Date().toISOString();
                     
-                    // Save to localStorage (we're already doing this in savePlaylist())
                     localStorage.setItem(playlistId, JSON.stringify(playlistData));
                     
-                    // Since we don't have PHP, we'll simulate a successful server save
-                    showStatus('Playlist saved successfully! 💾', 'success');
-                    
-                    // For debugging - show in console what would be sent to server
-                    console.log('Playlist saved (client-side only):', playlistData);
+                    fetch('/Playlist/playlist.txt', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(playlistData)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            showStatus('Playlist saved to server successfully! 💾', 'success');
+                        } else {
+                            throw new Error('Server error: ' + response.status);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error saving playlist to server:', error);
+                        showStatus('Error saving to server! Local copy saved.', 'warning');
+                    });
                 } catch (err) {
                     console.error('Error saving playlist:', err);
                     showStatus('Error saving playlist! Please try again. 😞', 'error');
                 }
             }
             
-            // Delete playlist file from server
             function deletePlaylistFile(playlistId) {
                 try {
-                    // Just delete from localStorage
                     localStorage.removeItem(playlistId);
                     
-                    // Clear the display
                     songsContainer.innerHTML = '<div class="empty-message">Your playlist is empty. Add some Britney songs! 💃</div>';
                     
-                    showStatus('Playlist deleted successfully! 🗑️', 'success');
+                    fetch('/Playlist/playlist.txt', {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            showStatus('Playlist deleted from server successfully! 🗑️', 'success');
+                        } else {
+                            throw new Error('Server error: ' + response.status);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting playlist from server:', error);
+                        showStatus('Error deleting from server but local copy removed!', 'warning');
+                    });
                 } catch (err) {
                     console.error('Error deleting playlist:', err);
                     showStatus('Error deleting playlist! Please try again. 😞', 'error');

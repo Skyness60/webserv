@@ -86,23 +86,61 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 
 // Gère une requête client
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
-    char buffer[1024] = {0};
-    int valread = read(client_fd, buffer, sizeof(buffer));
-    if (valread <= 0) {
+
+    const size_t buffer_size = 4096; // Increased buffer size to 4KB
+    char buffer[buffer_size] = {0};
+    std::string fullRequest;
+    ssize_t totalRead = 0;
+    ssize_t valread = 0;
+    
+    do {
+        valread = read(client_fd, buffer, buffer_size - 1);
+        if (valread <= 0) {
+            break;
+        }
+        buffer[valread] = '\0';
+        fullRequest.append(buffer, valread);
+        totalRead += valread;
+        
+        if (fullRequest.find("\r\n\r\n") != std::string::npos && fullRequest.find("Content-Length:") != std::string::npos) {
+            size_t headerEnd = fullRequest.find("\r\n\r\n");
+            std::string headers = fullRequest.substr(0, headerEnd);
+            
+            size_t contentLengthPos = headers.find("Content-Length:");
+            if (contentLengthPos != std::string::npos) {
+                size_t valueStart = headers.find(":", contentLengthPos) + 1;
+                size_t valueEnd = headers.find("\r\n", valueStart);
+                std::string contentLengthStr = headers.substr(valueStart, valueEnd - valueStart);
+                contentLengthStr.erase(0, contentLengthStr.find_first_not_of(" \t"));
+                contentLengthStr.erase(contentLengthStr.find_last_not_of(" \t") + 1);
+                
+                size_t contentLength = std::stoul(contentLengthStr);
+                size_t bodyStart = headerEnd + 4; // +4 for \r\n\r\n
+                
+                if (fullRequest.length() >= bodyStart + contentLength) {
+                    break;
+                }
+            }
+        }
+    } while (valread > 0);
+    
+    if (totalRead <= 0) {
         std::cout << "Client déconnecté: " << client_fd << std::endl;
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     } else {
-		std::string rawRequest(buffer, valread);
-		std::cout << rawRequest << std::endl;
+        std::cout << "Request received (" << totalRead << " bytes):" << std::endl;
+        if (fullRequest.length() < 1000) {
+            std::cout << fullRequest << std::endl;
+        } else {
+            std::cout << fullRequest.substr(0, 1000) << "... [truncated for display]" << std::endl;
+        }
         ClientRequest request;
-        if (request.parse(rawRequest)) {
-            std::string requestedPath = request.getResourcePath();
+        if (request.parse(fullRequest)) {
+            std::string requestedPath = request.getPath();
             std::string method = request.getMethod();
-            std::map<std::string, std::string> headers = request.getHeaders();
-            int serverIndex = 0;
-            // Use Response to handle the request
-            Response response(client_fd, request, _config, serverIndex);
+            
+            Response response(client_fd, request, _config, 0);
             response.oriente();
         } else {
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
