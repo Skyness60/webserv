@@ -6,21 +6,19 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/18 14:26:46 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/22 12:47:55 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ClientRequest.hpp"
+#include "DdosProtection.hpp"
 
 ClientRequest::ClientRequest() : 
     _method(""), 
     _path(""), 
     _httpVersion(""), 
     _body(""),
-    _resourcePath(""),
-    _timeout(0),
-    _maxBodySize(REQUEST_MAX_BODY_SIZE),
-    _timedOut(false)
+    _resourcePath("")
 {}
 
 ClientRequest::~ClientRequest() {}
@@ -37,9 +35,6 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
         this->_body = other._body;
         this->_formData = other._formData;
         this->_headers = other._headers;
-        this->_timeout = other._timeout;
-        this->_maxBodySize = other._maxBodySize;
-        this->_timedOut = other._timedOut;
     }
     return (*this);
 }
@@ -92,33 +87,34 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
     }
 }
 
-bool ClientRequest::parse( std::string const & rawRequest ) {
+bool ClientRequest::parse( std::string const & rawRequest, DdosProtection* ddosProtector ) {
 
-    initTimeout(REQUEST_DEFAULT_HEADER_TIMEOUT);
-    
+    if (ddosProtector) {
+        ddosProtector->initTimeout();
+    }
+
     std::istringstream request_stream(rawRequest);
     if (!parseMethod(request_stream))
-        return false;
+        return (false);
+    
     parseHeaders(request_stream);
 
-    if (!isBodySizeValid()) { // 413 - Payload Too Large
-        return false;
+    if (ddosProtector && !ddosProtector->isBodySizeValid(_headers, ddosProtector->getMaxBodySize())) {
+        return (false);
     }
-    
-    if (_headers.find("Content-Length") != _headers.end() || 
-        (_headers.find("Transfer-Encoding") != _headers.end() && 
-         _headers["Transfer-Encoding"] == "chunked")) {
-        updateTimeout(REQUEST_DEFAULT_BODY_TIMEOUT);
+
+    if (ddosProtector) {
+        ddosProtector->updateTimeout();
     }
     
     parseBody(request_stream);
     parseContentType();
     parseQueryParams();
     
-    return true;
+    return (true);
 }
 
-void ClientRequest::parseBody(std::istringstream & request_stream) {    // Check if the body is chunked or has Content-Length
+void ClientRequest::parseBody(std::istringstream & request_stream) { 
 
     if (_headers.find("Content-Length") != _headers.end()) {
         parseContentLengthBody(request_stream);
@@ -132,12 +128,6 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {    // Check
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
     size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    // Additional safety check
-    if (contentLength > _maxBodySize) {
-        return; // Don't process oversized bodies
-    }
-    
-    // Process with a safe buffer size
     const size_t bufferSize = 8192; // 8KB chunks
     char buffer[bufferSize];
     size_t totalRead = 0;
@@ -148,16 +138,11 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
         request_stream.read(buffer, toRead);
         size_t actualRead = request_stream.gcount();
         
-        if (actualRead == 0) break; // End of stream
+        if (actualRead == 0)
+            break;
         
         _body.append(buffer, actualRead);
         totalRead += actualRead;
-        
-        // Check timeout during long body reading
-        if (checkTimeout()) {
-            _body.clear(); // Discard partial body on timeout
-            return;
-        }
     }
 }
 
@@ -257,7 +242,7 @@ void ClientRequest::parseJsonContent( const std::string & jsonContent, std::map<
             currentValue += c;
         }
     }
-    if (!currentKey.empty()) { // Handle the last key-value pair
+    if (!currentKey.empty()) {
         jsonData[currentKey] = currentValue;
     }
     cleanupJsonValues(jsonData);
@@ -505,41 +490,6 @@ void ClientRequest::printRequest() {
     }
 }
 
-void ClientRequest::initTimeout(time_t seconds) {
-    _timeout = time(NULL) + seconds;
-}
-
-void ClientRequest::updateTimeout(time_t seconds) {
-    _timeout = time(NULL) + seconds;
-}
-
-bool ClientRequest::checkTimeout() {
-    if (_timeout == 0) // No timeout set
-        return false;
-        
-    if (time(NULL) > _timeout) {
-        _timedOut = true;
-        return true;
-    }
-    return false;
-}
-
-bool ClientRequest::hasTimedOut() const {
-    return _timedOut;
-}
-
-void ClientRequest::setMaxBodySize(size_t size) {
-    _maxBodySize = size;
-}
-
-bool ClientRequest::isBodySizeValid() const {
-    if (_headers.find("Content-Length") != _headers.end()) {
-        size_t contentLength = strtoul(_headers.at("Content-Length").c_str(), NULL, 10);
-        return contentLength <= _maxBodySize;
-    }
-    return true; // No Content-Length header
-}
-
 void ClientRequest::testClientRequestParsing() {
 
     // std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
@@ -704,7 +654,11 @@ void ClientRequest::testClientRequestParsing() {
     //     urlRequest.printRequest();
     // }
 
+    // Test DoS Protection using DdosProtection class instead of inline code
     std::cout << FBLU("\n======== Testing DoS Protection ========\n") << std::endl;
+    
+    // Create an instance of DdosProtection for testing
+    DdosProtection ddosProtector(60, 100, 300);
     
     std::string largeBodyTestRequest = 
         "POST /upload HTTP/1.1\r\n"
@@ -714,10 +668,33 @@ void ClientRequest::testClientRequestParsing() {
         "\r\n";
     
     ClientRequest largeBodyRequest;
-    bool largeBodyResult = largeBodyRequest.parse(largeBodyTestRequest);
+    bool largeBodyResult = largeBodyRequest.parse(largeBodyTestRequest, &ddosProtector);
     
     std::cout << "Large body protection test: " << 
         (largeBodyResult ? FRED("FAILED - Large body allowed") : FGRN("SUCCESS - Large body rejected")) << std::endl;
     
+    // Test rate limiting
+    std::cout << FBLU("\n======== Testing Rate Limiting ========\n") << std::endl;
+    
+    // Simulate multiple requests from same IP
+    std::string clientIp = "192.168.1.100";
+    
+    // Configure with strict rate limiting for testing
+    ddosProtector.configure(1, 3, 10); // 3 requests per second, 10 second block
+    
+    for (int i = 0; i < 5; i++) {
+        // Track a request
+        ddosProtector.trackClientRequest(clientIp);
+        
+        // Check if blocked after tracking
+        bool blocked = ddosProtector.isClientBlocked(clientIp);
+        
+        std::cout << "Request " << (i+1) << ": " << 
+            (blocked ? FRED("BLOCKED") : FGRN("ALLOWED")) << std::endl;
+    }
+    
+    // Print DDoS protection stats
+    std::cout << FBLU("\n======== DDoS Protection Statistics ========\n") << std::endl;
+    std::cout << ddosProtector.getStats() << std::endl;
 }
 
