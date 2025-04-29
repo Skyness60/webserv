@@ -2,7 +2,7 @@
 #include "SocketManager.hpp"
 #include "EpollManager.hpp"
 #include "SignalHandler.hpp"
-
+#include "DdosProtection.hpp"
 
 // Constructeur qui initialise le gestionnaire de serveur avec un fichier de configuration
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename) {

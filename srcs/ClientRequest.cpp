@@ -6,21 +6,19 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/29 13:12:31 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/29 17:18:58 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ClientRequest.hpp"
+#include "DdosProtection.hpp"
 
 ClientRequest::ClientRequest() : 
     _method(""), 
     _path(""), 
     _httpVersion(""), 
     _body(""),
-    _resourcePath(""),
-    _timeout(0),
-    _maxBodySize(REQUEST_MAX_BODY_SIZE),
-    _timedOut(false)
+    _resourcePath("")
 {}
 
 ClientRequest::~ClientRequest() {}
@@ -37,9 +35,6 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
         this->_body = other._body;
         this->_formData = other._formData;
         this->_headers = other._headers;
-        this->_timeout = other._timeout;
-        this->_maxBodySize = other._maxBodySize;
-        this->_timedOut = other._timedOut;
     }
     return (*this);
 }
@@ -92,33 +87,34 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
     }
 }
 
-bool ClientRequest::parse( std::string const & rawRequest ) {
+bool ClientRequest::parse( std::string const & rawRequest, DdosProtection* ddosProtector ) {
 
-    initTimeout(REQUEST_DEFAULT_HEADER_TIMEOUT);
-    
+    if (ddosProtector) {
+        ddosProtector->initTimeout();
+    }
+
     std::istringstream request_stream(rawRequest);
     if (!parseMethod(request_stream))
-        return false;
+        return (false);
+    
     parseHeaders(request_stream);
 
-    if (!isBodySizeValid()) {
-        return false;
+    if (ddosProtector && !ddosProtector->isBodySizeValid(_headers, ddosProtector->getMaxBodySize())) {
+        return (false);
     }
-    
-    if (_headers.find("Content-Length") != _headers.end() || 
-        (_headers.find("Transfer-Encoding") != _headers.end() && 
-         _headers["Transfer-Encoding"] == "chunked")) {
-        updateTimeout(REQUEST_DEFAULT_BODY_TIMEOUT);
+
+    if (ddosProtector) {
+        ddosProtector->updateTimeout();
     }
     
     parseBody(request_stream);
     parseContentType();
     parseQueryParams();
     
-    return true;
+    return (true);
 }
 
-void ClientRequest::parseBody(std::istringstream & request_stream) {
+void ClientRequest::parseBody(std::istringstream & request_stream) { 
 
     if (_headers.find("Content-Length") != _headers.end()) {
         parseContentLengthBody(request_stream);
@@ -132,11 +128,7 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
     size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    if (contentLength > _maxBodySize) {
-        return;
-    }
-    
-    const size_t bufferSize = 8192;
+    const size_t bufferSize = 8192; // 8KB chunks
     char buffer[bufferSize];
     size_t totalRead = 0;
     _body.clear();
@@ -151,11 +143,6 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
         
         _body.append(buffer, actualRead);
         totalRead += actualRead;
-        
-        if (checkTimeout()) {
-            _body.clear();
-            return;
-        }
     }
 }
 

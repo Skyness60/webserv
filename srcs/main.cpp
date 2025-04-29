@@ -1,5 +1,6 @@
 #include "ServerManager.hpp"
 #include "ClientRequest.hpp"
+#include "DdosProtection.hpp"
 
 static bool checkConf(char *av)
 {
@@ -17,6 +18,7 @@ int	main(int ac, char **av)
 			throw std::invalid_argument("[webserv_main] ERROR Usage: ./webserv <config.conf>");
 		if (!checkConf(av[1]))
 			throw std::invalid_argument("[webserv_main] ERROR Invalid config file extension");
+		signal(SIGPIPE, SIG_IGN);
 		ServerManager server(av[1]);
 
 		// L'affichage des valeurs de configuration 
