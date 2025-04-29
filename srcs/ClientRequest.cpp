@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/29 12:58:16 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/29 13:12:31 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -101,7 +101,7 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
         return false;
     parseHeaders(request_stream);
 
-    if (!isBodySizeValid()) { // 413 - Payload Too Large
+    if (!isBodySizeValid()) {
         return false;
     }
     
@@ -136,7 +136,7 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
         return;
     }
     
-    const size_t bufferSize = 8192; // 8KB chunks
+    const size_t bufferSize = 8192;
     char buffer[bufferSize];
     size_t totalRead = 0;
     _body.clear();
@@ -184,29 +184,22 @@ void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
 
 void ClientRequest::parseContentType() {
     
-    //std::cout << "DEBUG: parseContentType() called" << std::endl;
     if (_headers.find("Content-Type") == _headers.end()) {
-        std::cout << "DEBUG: No Content-Type header found" << std::endl;
         return;
     }
         
     std::string contentType = _headers["Content-Type"];
-    //std::cout << "DEBUG: Content-Type: " << contentType << std::endl;
     
     if (contentType.find("application/x-www-form-urlencoded") != std::string::npos) {
-        //std::cout << "DEBUG: Parsing as form-urlencoded" << std::endl;
         parseFormUrlEncoded();
     }
     else if (contentType.find("multipart/form-data") != std::string::npos) {
-        //std::cout << "DEBUG: Parsing as multipart form data" << std::endl;
         parseMultipartFormData();
     }
     else if (contentType.find("application/json") != std::string::npos) {
-        //std::cout << "DEBUG: Parsing as JSON" << std::endl;
         parseJson();
     }
     else if (contentType.find("text/plain") != std::string::npos) {
-        //std::cout << "DEBUG: Parsing as plain text" << std::endl;
         parseText();
     }
     else {
@@ -215,28 +208,18 @@ void ClientRequest::parseContentType() {
 }
 
 void ClientRequest::parseJson() {
-    //std::cout << "DEBUG: parseJson() called" << std::endl;
     std::map<std::string, std::string> jsonData;
     std::string jsonStr = _body;
-    
-    //std::cout << "DEBUG: JSON body length: " << jsonStr.length() << std::endl;
-    //std::cout << "DEBUG: JSON body content: " << jsonStr << std::endl;
-    
+        
     size_t start = jsonStr.find('{');
     size_t end = jsonStr.rfind('}');
     
-    //std::cout << "DEBUG: JSON start position: " << start << ", end position: " << end << std::endl;
-    
     if (start != std::string::npos && end != std::string::npos && start < end) {
-        //std::cout << "DEBUG: Valid JSON structure found, extracting content" << std::endl;
         jsonStr = jsonStr.substr(start + 1, end - start - 1);
-        //std::cout << "DEBUG: Extracted JSON content: " << jsonStr << std::endl;
         parseJsonContent(jsonStr, jsonData);
         _formData = jsonData;
-        //std::cout << "DEBUG: JSON parsing completed, extracted " << jsonData.size() << " key-value pairs" << std::endl;
     }
     else {
-        //std::cout << "DEBUG: Invalid JSON structure! start=" << start << ", end=" << end << std::endl;
         if (start == std::string::npos)
             std::cout << "DEBUG: No opening bracket found" << std::endl;
         if (end == std::string::npos)
@@ -342,10 +325,6 @@ void ClientRequest::parseFormUrlEncoded() {
         processFormDataPair(pairs[i], formData);
     }
     _formData = formData;
-    // std::cout << FYEL("_formData: ") << std::endl;
-    // for (std::map<std::string, std::string>::const_iterator it = _formData.begin(); it != _formData.end(); ++it) {
-    //     std::cout << "  " << it->first << ": " << it->second << std::endl;
-    // }
 }
 
 std::vector<std::string> ClientRequest::splitFormData( const std::string & data ) {
@@ -445,7 +424,7 @@ std::string ClientRequest::extractFieldName(const std::string& headers) {
     if (namePos == std::string::npos) {
         return "";
     }
-    namePos += 6; // Skip "name=\""
+    namePos += 6;
     size_t quoteEnd = headers.find("\"", namePos);
     if (quoteEnd == std::string::npos) {
         return "";
@@ -550,7 +529,7 @@ void ClientRequest::updateTimeout(time_t seconds) {
 }
 
 bool ClientRequest::checkTimeout() {
-    if (_timeout == 0) // No timeout set
+    if (_timeout == 0)
         return false;
         
     if (time(NULL) > _timeout) {
@@ -575,185 +554,3 @@ bool ClientRequest::isBodySizeValid() const {
     }
     return true;
 }
-
-void ClientRequest::testClientRequestParsing() {
-
-    // std::cout << FBLU("\n======== Testing GET Method ========\n") << std::endl;
-    // std::string testRequest = 
-    //     "GET /index.html HTTP/1.1\r\n"
-    //     "Host: localhost:8080\r\n"
-    //     "User-Agent: Mozilla/5.0\r\n"
-    //     "Accept: text/html,application/xhtml+xml\r\n"
-    //     "Connection: keep-alive\r\n"
-    //     "\r\n";
-    
-    // ClientRequest request;
-    // bool parseSuccess = request.parse(testRequest);
-    
-    // std::cout << "Parsing result: " << (parseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    // if (parseSuccess) {
-    //     request.printRequest();
-    // }
-    
-    // std::cout << FBLU("\n======== Testing POST Method ========\n") << std::endl;
-    // std::string testPostRequest = 
-    //     "POST /submit-form HTTP/1.1\r\n"
-    //     "Host: localhost:8080\r\n"
-    //     "Content-Type: application/x-www-form-urlencoded\r\n"
-    //     "Content-Length: 29\r\n"
-    //     "\r\n"
-    //     "username=john&password=secret";
-    
-    // ClientRequest postRequest;
-    // bool postParseSuccess = postRequest.parse(testPostRequest);
-    
-    
-    // std::cout << "Parsing result: " << (postParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    // if (postParseSuccess) {
-    //     postRequest.printRequest();
-        
-    //     std::cout << FYEL("_formData:") << std::endl;
-    //     std::map<std::string, std::string> formData = postRequest._formData;
-    //     for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-    //         it != formData.end(); ++it) {
-    //         std::cout << "  " << it->first << ": " << it->second << std::endl;
-    //     }
-    // }
-
-    // std::cout << FBLU("\n======== Testing Form URL Encoded Parsing ========\n") << std::endl;
-    // std::string testFormUrlEncodedRequest = 
-    //     "POST /submit-form HTTP/1.1\r\n"
-    //     "Host: localhost:8080\r\n"
-    //     "Content-Type: application/x-www-form-urlencoded\r\n"
-    //     "Content-Length: 46\r\n"
-    //     "\r\n"
-    //     "username=johndoe&email=john@example.com&age=30";
-
-    // ClientRequest formUrlEncodedRequest;
-    // bool formUrlEncodedParseSuccess = formUrlEncodedRequest.parse(testFormUrlEncodedRequest);
-
-    // std::cout << "Parsing result: " << (formUrlEncodedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    // if (formUrlEncodedParseSuccess) {
-    //     formUrlEncodedRequest.printRequest();
-
-    //     std::cout << FYEL("_formData:") << std::endl;
-    //     std::map<std::string, std::string> formData = formUrlEncodedRequest._formData;
-    //     for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-    //         it != formData.end(); ++it) {
-    //         std::cout << "  " << it->first << ": " << it->second << std::endl;
-    //     }
-    // }
-
-//     std::cout << FBLU("\n======== Testing JSON Parsing ========\n") << std::endl;
-//     std::string testJsonRequest = 
-//         "POST /api/data HTTP/1.1\r\n"
-//         "Host: localhost:8080\r\n"
-//         "Content-Type: application/json\r\n"
-//         "Content-Length: 59\r\n"
-//         "\r\n"
-//         "{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"age\":\"30\"}";
-    
-//     ClientRequest jsonRequest;
-//     bool jsonParseSuccess = jsonRequest.parse(testJsonRequest);
-    
-//     std::cout << "Parsing result: " << (jsonParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-//     if (jsonParseSuccess) {
-//         jsonRequest.printRequest();
-        
-//         std::cout << FYEL("Parsed JSON data:") << std::endl;
-//         std::map<std::string, std::string> formData = jsonRequest._formData;
-//         for (std::map<std::string, std::string>::const_iterator it = formData.begin(); 
-//              it != formData.end(); ++it) {
-//             std::cout << "  " << it->first << ": " << it->second << std::endl;
-//         }
-//     }
-    
-//     std::cout << FBLU("\n======== Testing Text Parsing ========\n") << std::endl;
-//     std::string testTextRequest = 
-//         "POST /api/text HTTP/1.1\r\n"
-//         "Host: localhost:8080\r\n"
-//         "Content-Type: text/plain\r\n"
-//         "Content-Length: 46\r\n"
-//         "\r\n"
-//         "name=Jane Doe\r\nemail=jane@example.com\r\nage=28";
-    
-//     ClientRequest textRequest;
-//     bool textParseSuccess = textRequest.parse(testTextRequest);
-    
-//     std::cout << "Parsing result: " << (textParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-//     if (textParseSuccess) {
-//         textRequest.printRequest();
-//     }
-    
-
-//     std::cout << FBLU("\n======== Testing POST CHUNCKED Method ========\n") << std::endl;
-//     std::string testChunkedRequest = 
-//     "POST /chunked HTTP/1.1\r\n"
-//     "Host: localhost:8080\r\n"
-//     "Transfer-Encoding: chunked\r\n"
-//     "Content-Type: text/plain\r\n"
-//     "\r\n"
-//     "7\r\n"
-//     "Mozilla\r\n"
-//     "9\r\n"
-//     "Developer\r\n"
-//     "7\r\n"
-//     "Network\r\n"
-//     "0\r\n"
-//     "\r\n";
-
-//     ClientRequest chunkedRequest;
-//     bool chunkedParseSuccess = chunkedRequest.parse(testChunkedRequest);
-
-//     std::cout << "Parsing result: " << (chunkedParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-//     if (chunkedParseSuccess) {
-//         chunkedRequest.printRequest();
-//     }
-    
-//     std::cout << FBLU("\n======== Testing DELETE Method ========\n") << std::endl;
-//     std::string testDeleteRequest = 
-//         "DELETE /users/123 HTTP/1.1\r\n"
-//         "Host: localhost:8080\r\n"
-//         "Authorization: Bearer token123\r\n"
-//         "\r\n";
-    
-//     ClientRequest deleteRequest;
-//     bool deleteParseSuccess = deleteRequest.parse(testDeleteRequest);
-    
-//     std::cout << "Parsing result: " << (deleteParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-//     if (deleteParseSuccess) {
-//         deleteRequest.printRequest();
-//     }
-
-    // std::cout << FBLU("\n======== Testing URL Query Parameter Parsing ========\n") << std::endl;
-    // std::string testUrlRequest = 
-    //     "GET /search?q=test%20query&page=2&sort=date&filter=active HTTP/1.1\r\n"
-    //     "Host: localhost:8080\r\n"
-    //     "Connection: keep-alive\r\n"
-    //     "\r\n";
-
-    // ClientRequest urlRequest;
-    // bool urlParseSuccess = urlRequest.parse(testUrlRequest);
-
-    // std::cout << "Parsing result: " << (urlParseSuccess ? FGRN("SUCCESS") : FRED("FAILED")) << std::endl;
-    // if (urlParseSuccess) {
-    //     urlRequest.printRequest();
-    // }
-
-    std::cout << FBLU("\n======== Testing DDoS Protection ========\n") << std::endl;
-    
-    std::string largeBodyTestRequest = 
-        "POST /upload HTTP/1.1\r\n"
-        "Host: localhost:8080\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: 104857600\r\n" // 100MB (should exceed default limit)
-        "\r\n";
-    
-    ClientRequest largeBodyRequest;
-    bool largeBodyResult = largeBodyRequest.parse(largeBodyTestRequest);
-    
-    std::cout << "Large body protection test: " << 
-        (largeBodyResult ? FRED("FAILED - Large body allowed") : FGRN("SUCCESS - Large body rejected")) << std::endl;
-    
-}
-

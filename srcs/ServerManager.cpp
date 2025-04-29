@@ -87,7 +87,7 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 // Gère une requête client
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 
-    const size_t buffer_size = 4096; // Increased buffer size to 4KB
+    const size_t buffer_size = 8192;
     char buffer[buffer_size] = {0};
     std::string fullRequest;
     ssize_t totalRead = 0;
@@ -147,6 +147,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         }
     }
 }
+
 
 // Nettoie les ressources utilisées par le serveur
 void ServerManager::cleanup(int epoll_fd, const std::vector<int> &server_fds) {
