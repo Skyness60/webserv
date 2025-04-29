@@ -88,6 +88,9 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 
     const size_t buffer_size = 8192;
+    static DdosProtection ddosProtector(DDOS_DEFAULT_RATE_WINDOW, 
+        DDOS_DEFAULT_MAX_REQUESTS, 
+        DDOS_DEFAULT_BLOCK_DURATION);
     char buffer[buffer_size] = {0};
     std::string fullRequest;
     ssize_t totalRead = 0;
@@ -128,21 +131,14 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         std::cout << "Client déconnecté: " << client_fd << std::endl;
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-    } else {
-        std::cout << "Request received (" << totalRead << " bytes):" << std::endl;
-        if (fullRequest.length() < 1000) {
-            std::cout << fullRequest << std::endl;
-        } else {
-            std::cout << fullRequest.substr(0, 1000) << "... [truncated for display]" << std::endl;
-        }
+    }
+    else {
         ClientRequest request;
-        if (request.parse(fullRequest)) {
-            std::string requestedPath = request.getPath();
-            std::string method = request.getMethod();
-            
+        if (request.parse(fullRequest, &ddosProtector)) {          
             Response response(client_fd, request, _config, 0);
             response.oriente();
-        } else {
+        }
+        else {
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
         }
     }

@@ -133,7 +133,6 @@ void Response::dealPost(){
     if (lastSlashPos != std::string::npos) {
         std::string dirPath = fullPath.substr(0, lastSlashPos);
         std::string mkdirCmd = "mkdir -p " + dirPath;
-        std::cout << "Creating directory: " << dirPath << std::endl;
         system(mkdirCmd.c_str());
     }
     
@@ -147,7 +146,7 @@ void Response::dealPost(){
             }
         }
         else {    
-            std::cout << "Writing generic body data to file" << std::endl;
+            std::cout << "Writing body data to file" << std::endl;
             out << this->_requestBody;
             out.flush(); 
         }

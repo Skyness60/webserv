@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/29 17:18:58 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/29 17:34:25 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,7 +18,10 @@ ClientRequest::ClientRequest() :
     _path(""), 
     _httpVersion(""), 
     _body(""),
-    _resourcePath("")
+    _resourcePath(""),
+    _timeout(0),
+    _maxBodySize(REQUEST_MAX_BODY_SIZE),
+    _timedOut(false)
 {}
 
 ClientRequest::~ClientRequest() {}
@@ -35,6 +38,9 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
         this->_body = other._body;
         this->_formData = other._formData;
         this->_headers = other._headers;
+        this->_timeout = other._timeout;
+        this->_maxBodySize = other._maxBodySize;
+        this->_timedOut = other._timedOut;
     }
     return (*this);
 }
@@ -114,6 +120,7 @@ bool ClientRequest::parse( std::string const & rawRequest, DdosProtection* ddosP
     return (true);
 }
 
+
 void ClientRequest::parseBody(std::istringstream & request_stream) { 
 
     if (_headers.find("Content-Length") != _headers.end()) {
@@ -126,9 +133,13 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {
 }
 
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
+    
     size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    const size_t bufferSize = 8192; // 8KB chunks
+    if (contentLength > _maxBodySize) {
+        return;
+    }
+    const size_t bufferSize = 8192;
     char buffer[bufferSize];
     size_t totalRead = 0;
     _body.clear();
@@ -143,6 +154,11 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
         
         _body.append(buffer, actualRead);
         totalRead += actualRead;
+
+        if (checkTimeout()) {
+            _body.clear();
+            return;
+        }
     }
 }
 
