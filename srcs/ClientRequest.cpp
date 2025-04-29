@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/28 22:01:12 by olly             ###   ########.fr       */
+/*   Updated: 2025/04/29 12:58:16 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -118,7 +118,7 @@ bool ClientRequest::parse( std::string const & rawRequest ) {
     return true;
 }
 
-void ClientRequest::parseBody(std::istringstream & request_stream) {    // Check if the body is chunked or has Content-Length
+void ClientRequest::parseBody(std::istringstream & request_stream) {
 
     if (_headers.find("Content-Length") != _headers.end()) {
         parseContentLengthBody(request_stream);
@@ -132,12 +132,10 @@ void ClientRequest::parseBody(std::istringstream & request_stream) {    // Check
 void ClientRequest::parseContentLengthBody( std::istringstream & request_stream ) {
     size_t contentLength = strtoul(_headers["Content-Length"].c_str(), NULL, 10);
     
-    // Additional safety check
     if (contentLength > _maxBodySize) {
-        return; // Don't process oversized bodies
+        return;
     }
     
-    // Process with a safe buffer size
     const size_t bufferSize = 8192; // 8KB chunks
     char buffer[bufferSize];
     size_t totalRead = 0;
@@ -148,14 +146,14 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
         request_stream.read(buffer, toRead);
         size_t actualRead = request_stream.gcount();
         
-        if (actualRead == 0) break; // End of stream
+        if (actualRead == 0)
+            break;
         
         _body.append(buffer, actualRead);
         totalRead += actualRead;
         
-        // Check timeout during long body reading
         if (checkTimeout()) {
-            _body.clear(); // Discard partial body on timeout
+            _body.clear();
             return;
         }
     }
