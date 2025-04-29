@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/22 13:02:39 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/04/29 17:23:40 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,10 @@
 #include "Includes.hpp"
 
 class DdosProtection;
+
+#define REQUEST_DEFAULT_HEADER_TIMEOUT 10  // 10 seconds for headers
+#define REQUEST_DEFAULT_BODY_TIMEOUT 30    // 30 seconds for body
+#define REQUEST_MAX_BODY_SIZE 10485760     // 10MB default max body size
 
 class ClientRequest {
     
@@ -27,7 +31,10 @@ class ClientRequest {
         std::map<std::string, std::string>  _formData;
         std::map<std::string, std::string>  _headers;
         std::map<std::string, std::string>  _queryParams;  
-        std::string         _resourcePath;                 
+        std::string         _resourcePath;
+        time_t              _timeout;
+        size_t              _maxBodySize;
+        bool                _timedOut;                 
 
     public:
     
@@ -59,6 +66,12 @@ class ClientRequest {
         void                printRequest();
         void                parseQueryParams();
         std::string         urlDecode(const std::string& encoded);
+        void                initTimeout(time_t seconds = REQUEST_DEFAULT_HEADER_TIMEOUT);
+        void                updateTimeout(time_t seconds = REQUEST_DEFAULT_BODY_TIMEOUT);
+        bool                checkTimeout();
+        void                setMaxBodySize(size_t size);
+        bool                isBodySizeValid() const;
+        bool                hasTimedOut() const;
 
     // Getters
         std::string         getMethod()         const;
