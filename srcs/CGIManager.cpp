@@ -21,10 +21,20 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request) 
 			_locationName = *it;
 			break;
 		}
+		else if (!path.empty() && !extension.empty())
+		{
+			_path = path;
+			_extension = extension;
+			_root = _config.getLocationValue(serverIndex, *it, "root");
+			if (_root.empty())
+				_root = _config.getConfigValue(serverIndex, "root");
+			_locationName = *it;
+			break;
+		}
 		else
 		{
 			path = "";
-			extension = "";	
+			extension = "";
 			root = "";
 		}
 	}
