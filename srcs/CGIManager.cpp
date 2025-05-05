@@ -79,6 +79,27 @@ char **CGIManager::createEnvArray() {
 	return envArray;
 }
 
+std::pair<std::string, std::string> CGIManager::parseCGIResponse(const std::string &cgiOutput)
+{
+	size_t headerEnd = cgiOutput.find("\r\n\r\n");
+	size_t skip = 4;
+	if (headerEnd == std::string::npos) {
+		headerEnd = cgiOutput.find("\n\n");
+		skip = 2;
+	}
+	if (headerEnd == std::string::npos) {
+		return std::make_pair("", cgiOutput);
+	}
+	std::string header = cgiOutput.substr(0, headerEnd);
+	std::string body;
+	if (cgiOutput[headerEnd] == '\r') {
+		body = cgiOutput.substr(headerEnd + 4);
+	} else {
+		body = cgiOutput.substr(headerEnd + 2);
+	}
+	return std::make_pair(header, body);
+}
+
 static std::string getScriptName(std::string path){
 	size_t pos = path.find_first_of('?');
 	if (pos != std::string::npos) {
@@ -91,6 +112,29 @@ static std::string getScriptName(std::string path){
 	}
 	return path;
 }
+
+static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodySize) {
+	std::istringstream stream(cgiHeaders);
+	std::string line;
+	std::string finalHeaders;
+	bool hasContentLength = false;
+	bool hasContentType = false;
+
+	while (std::getline(stream, line)) {
+		if (line.find("Content-Length:") != std::string::npos)
+			hasContentLength = true;
+		if (line.find("Content-Type:") != std::string::npos)
+			hasContentType = true;
+		finalHeaders += line + "\r\n";
+	}
+	if (!hasContentLength)
+		finalHeaders += "Content-Length: " + std::to_string(bodySize) + "\r\n";
+	if (!hasContentType)
+		finalHeaders += "Content-Type: text/html\r\n"; // ou text/plain par défaut
+	finalHeaders += "Connection: close\r\n";
+	return finalHeaders;
+}
+
 
 void CGIManager::executeCGI(int client_fd, const std::string &method) {
 	(void)client_fd;
@@ -141,8 +185,15 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		close(pipe_fd[0]);
 		int status;
 		waitpid(pid, &status, 0);
-		std::cout << "CGI result: " << cgiOutput << std::endl;
-		send(client_fd, cgiOutput.c_str(), cgiOutput.size(), MSG_NOSIGNAL);
+		std::cout << "----- CGI OUTPUT BEGIN -----" << std::endl;
+		std::cout << cgiOutput << std::endl;
+		std::cout << "----- CGI OUTPUT END   -----" << std::endl;
+				std::pair<std::string, std::string> parsed = parseCGIResponse(cgiOutput);
+		std::string response = "HTTP/1.1 200 OK\r\n";
+		response += buildFinalHeaders(parsed.first, parsed.second.size());
+		response += "\r\n";
+		response += parsed.second;
+		send(client_fd, response.c_str(), response.length(), 0);
 	}
 }
 

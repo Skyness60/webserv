@@ -21,6 +21,7 @@ class CGIManager {
 
 		void executeCGI(int client_fd, const std::string &method);
 		char **createEnvArray();
+		std::pair<std::string, std::string> parseCGIResponse(const std::string &cgiOutput);
 		std::string getPath() const;
 		std::string getExtension() const;
 		std::string getRoot() const;
