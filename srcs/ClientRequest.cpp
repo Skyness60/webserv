@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
+/*   By: sami <sami@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/29 17:34:25 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/05/05 23:18:59 by sami             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,7 +46,7 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
 }
 
 std::string         ClientRequest::getMethod() const { return _method; }
-std::string         ClientRequest::getPath() const { return _path; }
+std::string         ClientRequest::getPath() const { return (_path); }
 std::string         ClientRequest::getHttpVersion() const { return _httpVersion; }
 std::string         ClientRequest::getBody() const { return _body; }
 std::map<std::string, std::string> ClientRequest::getHeaders() const { return _headers; }

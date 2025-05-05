@@ -52,52 +52,60 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-    std::string fullPath = this->_config.getConfigValue(_indexServ, "root") + this->_request.getPath();
+    std::string root = this->_config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "root");
+	std::cout << "root :" << root << std::endl;
+    if (root.empty()) {
+        root = this->_config.getConfigValue(_indexServ, "root");
+    }
+
+    std::string fullPath = root + this->_request.getPath();
+    std::cout << "fullPath: " << fullPath << std::endl;
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getConfigValue(_indexServ, "index");
+        std::string indexFile = _config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "index");
+        if (indexFile.empty()) {
+            indexFile = _config.getConfigValue(_indexServ, "index");
+        }
         fullPath += "/" + indexFile;
     }
-	// Ici c'est la ou j'appelerais la fonction CGI (c'est pas encore fait et c'est pas une ia)
-	if (isCGI(this->_request.getPath())) {
-		CGIManager cgi(_config, _indexServ, this->_request);
-		std::cout << "CGI path: " << cgi.getPath() << std::endl;
-		std::cout << "CGI extension: " << cgi.getExtension() << std::endl;
-		std::cout << "CGI root: " << cgi.getRoot() << std::endl;
-		cgi.executeCGI(_client_fd, this->_request.getMethod());
-		return;
-	}
+
+    if (isCGI(this->_request.getPath())) {
+        CGIManager cgi(_config, _indexServ, this->_request);
+        cgi.executeCGI(_client_fd, this->_request.getMethod());
+        return;
+    }
 
     std::ifstream file(fullPath.c_str(), std::ios::binary);
-	if (!file.is_open()) {
-		std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
-		std::cout << errorPage << std::endl;
-		std::string errorCode = errorPage.substr(0, errorPage.find(' ')); // Extract error code
-		std::cout << errorCode << std::endl;
-		std::string errorFile = errorPage.substr(errorPage.find(' ') + 1); // Extract error file
-		std::cout << errorFile << std::endl;
-	
-		if (errorCode == "404") {
-			fullPath = "./www/" + errorFile;
-			if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-				safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
-				return;
-			}
+    if (!file.is_open()) {
+        std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
+        if (!errorPage.empty()) {
+            std::string errorCode = errorPage.substr(0, errorPage.find(' '));
+            std::string errorFile = errorPage.substr(errorPage.find(' ') + 1);
+            if (errorCode == "404") {
+                fullPath = "./www/" + errorFile;
+                if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+                    safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
+                    return;
+                }
+                file.open(fullPath.c_str(), std::ios::binary);
+                if (!file.is_open()) {
+                    safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+                    return;
+                }
+            } else {
+                safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+                return;
+            }
+        } else {
+            safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+            return;
+        }
+    }
 
-			file.open(fullPath.c_str(), std::ios::binary);
-			if (!file.is_open()) {
-				safeSend(302, "Found", errorFile.c_str(), "text/html");
-				return;
-			}
-		} else {
-			safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-			return;
-		}
-	}
-	std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::string contentType = getContentType(fullPath);
-	safeSend(200, "OK", body, contentType);
+    safeSend(200, "OK", body, contentType);
 }
 
 void Response::dealDelete() {
