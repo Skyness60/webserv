@@ -115,20 +115,6 @@ void Response::dealDelete() {
     }
 }
 
-bool Response::checkPost(std::string postUrl){
-	if (postUrl.find("/Playlist/playlist.txt") != std::string::npos) {
-		return true;
-	}
-
-	std::vector<std::string> vector = this->_config.getLocationName(_indexServ);
-	for (unsigned long i = 0; i < vector.size(); i++) {
-		if (postUrl.find(vector[i]) == 0) {
-			return true;
-		}
-	}
-	return false;
-}
-
 void Response::dealPost(){
     std::string requestPath = this->_requestPath;
     std::string fullPath = "./www" + requestPath;
