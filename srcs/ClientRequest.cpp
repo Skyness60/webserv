@@ -66,6 +66,15 @@ bool ClientRequest::parseMethod( std::istringstream & stream ) {
     return (true);
 }
 
+std::string ClientRequest::getContentType() const {
+    for (std::map<std::string, std::string>::const_iterator it = this->_headers.begin(); it != _headers.end(); it++) {
+        if (it->first == "Content-Type") {
+            return it->second;
+        }
+    }
+    return "/text/plain";
+}
+
 void ClientRequest::parseHeaders( std::istringstream & stream ) {
     
     std::string line;

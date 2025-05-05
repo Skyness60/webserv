@@ -17,7 +17,6 @@ class Response{
 		std::pair<std::string, void (Response::*)()> _func[3];
 		ClientRequest &_request;
 		int _indexServ;
-		void sendResponse(int statusCode, const std::string &statusMessage, const std::string &body);
 		bool isCGI(std::string path);
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
 	public :
@@ -29,6 +28,4 @@ class Response{
 		void dealPost();
 		void dealDelete();
 		void oriente();
-		bool checkPost(std::string postUrl);
-
 };

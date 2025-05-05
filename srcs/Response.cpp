@@ -46,7 +46,7 @@ void Response::dealGet() {
     }
 	// Ici c'est la ou j'appelerais la fonction CGI (c'est pas encore fait et c'est pas une ia)
 	if (isCGI(this->_request.getPath())) {
-		CGIManager cgi(_config, _indexServ);
+		CGIManager cgi(_config, _indexServ, this->_request);
 		std::cout << "CGI path: " << cgi.getPath() << std::endl;
 		std::cout << "CGI extension: " << cgi.getExtension() << std::endl;
 		std::cout << "CGI root: " << cgi.getRoot() << std::endl;
@@ -177,6 +177,7 @@ bool Response::isCGI(std::string path) {\
 		std::string location = this->_config.getLocationName(_indexServ)[i];
 		location = location.substr(9);
 		if (path.find(location) != std::string::npos) {
+			std::cout << "REQUETE : " << this->_request.getPath() << std::endl;
 			if (path.find(".py") != std::string::npos) {
 				return true;
 			}

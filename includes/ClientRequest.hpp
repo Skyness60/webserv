@@ -67,6 +67,7 @@ class ClientRequest {
         std::string         getResourcePath()   const;
         std::string         getHttpVersion()    const;
         std::string         getBody()           const;
+		std::string         getContentType()    const;
         std::map<std::string, std::string> getHeaders() const;
         std::map<std::string, std::string> getQueryParams() const;
         
