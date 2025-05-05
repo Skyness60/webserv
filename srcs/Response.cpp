@@ -52,43 +52,60 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-    std::string fullPath = "./www" + this->_request.getPath();
+    std::string root = this->_config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "root");
+	std::cout << "root :" << root << std::endl;
+    if (root.empty()) {
+        root = this->_config.getConfigValue(_indexServ, "root");
+    }
+
+    std::string fullPath = root + this->_request.getPath();
+    std::cout << "fullPath: " << fullPath << std::endl;
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getConfigValue(_indexServ, "index");
+        std::string indexFile = _config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "index");
+        if (indexFile.empty()) {
+            indexFile = _config.getConfigValue(_indexServ, "index");
+        }
         fullPath += "/" + indexFile;
     }
 
-    std::ifstream file(fullPath.c_str(), std::ios::binary);
-	if (!file.is_open()) {
-		std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
-		std::cout << errorPage << std::endl;
-		std::string errorCode = errorPage.substr(0, errorPage.find(' ')); // Extract error code
-		std::cout << errorCode << std::endl;
-		std::string errorFile = errorPage.substr(errorPage.find(' ') + 1); // Extract error file
-		std::cout << errorFile << std::endl;
-	
-		if (errorCode == "404") {
-			fullPath = "./www/" + errorFile;
-			if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-				safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
-				return;
-			}
+    if (isCGI(this->_request.getPath())) {
+        CGIManager cgi(_config, _indexServ, this->_request);
+        cgi.executeCGI(_client_fd, this->_request.getMethod());
+        return;
+    }
 
-			file.open(fullPath.c_str(), std::ios::binary);
-			if (!file.is_open()) {
-				safeSend(302, "Found", errorFile.c_str(), "text/html");
-				return;
-			}
-		} else {
-			safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-			return;
-		}
-	}
-	std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::ifstream file(fullPath.c_str(), std::ios::binary);
+    if (!file.is_open()) {
+        std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
+        if (!errorPage.empty()) {
+            std::string errorCode = errorPage.substr(0, errorPage.find(' '));
+            std::string errorFile = errorPage.substr(errorPage.find(' ') + 1);
+            if (errorCode == "404") {
+                fullPath = "./www/" + errorFile;
+                if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+                    safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
+                    return;
+                }
+                file.open(fullPath.c_str(), std::ios::binary);
+                if (!file.is_open()) {
+                    safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+                    return;
+                }
+            } else {
+                safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+                return;
+            }
+        } else {
+            safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+            return;
+        }
+    }
+
+    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::string contentType = getContentType(fullPath);
-	safeSend(200, "OK", body, contentType);
+    safeSend(200, "OK", body, contentType);
 }
 
 void Response::dealDelete() {
@@ -104,20 +121,6 @@ void Response::dealDelete() {
     } else {
         safeSend(500, "Internal Server Error", "Failed to delete the file.", "text/plain");
     }
-}
-
-bool Response::checkPost(std::string postUrl){
-	if (postUrl.find("/Playlist/playlist.txt") != std::string::npos) {
-		return true;
-	}
-
-	std::vector<std::string> vector = this->_config.getLocationName(_indexServ);
-	for (unsigned long i = 0; i < vector.size(); i++) {
-		if (postUrl.find(vector[i]) == 0) {
-			return true;
-		}
-	}
-	return false;
 }
 
 void Response::dealPost(){
@@ -190,4 +193,42 @@ void Response::oriente() {
         }
     }
     safeSend(405, "Method Not Allowed", "The requested method is not supported.", "text/plain");
+}
+
+bool Response::isCGI(std::string path) {\
+	for (size_t i = 0; i < this->_config.getLocationName(_indexServ).size(); i++) {
+		std::string location = this->_config.getLocationName(_indexServ)[i];
+		location = location.substr(9);
+		if (path.find(location) != std::string::npos) {
+			std::cout << "REQUETE : " << this->_request.getPath() << std::endl;
+			if (path.find(".py") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".pl") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".php") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".rb") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".cgi") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".sh") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".js") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".jsp") != std::string::npos) {
+				return true;
+			}
+			if (path.find(".asp") != std::string::npos) {
+				return true;
+			}
+		}
+	}
+	return false;
 }

@@ -20,7 +20,6 @@ int	main(int ac, char **av)
 			throw std::invalid_argument("[webserv_main] ERROR Invalid config file extension");
 		signal(SIGPIPE, SIG_IGN);
 		ServerManager server(av[1]);
-
 		// L'affichage des valeurs de configuration 
 		std::vector<std::map<std::string, std::string> > configValues = server.getConfigValues();
 		std::vector<std::map<std::string, std::map<std::string, std::string> > > locationValues = server.getLocationValues();

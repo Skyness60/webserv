@@ -7,6 +7,7 @@
 
 class Config; // Forward declaration of Config class
 class ClientRequest; 
+class CGIManager;
 
 
 class Response{
@@ -16,7 +17,8 @@ class Response{
 		std::pair<std::string, void (Response::*)()> _func[3];
 		ClientRequest &_request;
 		int _indexServ;
-		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType);
+		bool isCGI(std::string path);
+		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
 		std::string _requestMethod;
 		std::string _requestPath;
 		std::map<std::string, std::string> _requestHeaders;
@@ -31,5 +33,4 @@ class Response{
 		void dealPost();
 		void dealDelete();
 		void oriente();
-		bool checkPost(std::string postUrl);
 };
