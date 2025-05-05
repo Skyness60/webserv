@@ -128,6 +128,30 @@ body {
     color: #fff;
 }
 
+.body__500 {
+  background-color: #1C1C1C;
+  color: #fff;
+}
+
+.body__500 h1,
+.body__500 h4,
+.body__500 p,
+.body__500 a {
+  color: #fff;
+}
+
+.body__405 {
+  background-color: #1C1C1C;
+  color: #fff;
+}
+
+.body__405 h1,
+.body__405 h4,
+.body__405 p,
+.body__405 a {
+  color: #fff;
+}
+
   
   /*- Welcom page*/
 
@@ -173,6 +197,32 @@ body {
     padding: 240px 0;
   
     background-image: url("./images/photo1.jpg");
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .welcome__500 {
+    box-sizing: border-box;
+    min-height: 100vh;
+  
+    margin-top: -100px;
+    padding: 240px 0;
+  
+    background-image: url("./images/photo2.jpg");
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .welcome__405 {
+    box-sizing: border-box;
+    min-height: 100vh;
+  
+    margin-top: -100px;
+    padding: 240px 0;
+  
+    background-image: url("./images/photo3.jpg");
     background-repeat: no-repeat;
     background-size: cover;
     background-position: center;
