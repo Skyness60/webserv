@@ -11,7 +11,7 @@ SERVER_PORT=2222
 SERVER_HOST="localhost"
 CONCURRENT_USERS=50
 REQUEST_PATH="/"
-CONFIG_FILE="../config/webserv.conf"
+CONFIG_FILE="./config/webserv.conf"
 
 
 if [ "$1" != "" ]; then
@@ -22,7 +22,8 @@ check_server() {
     if ! netstat -tuln | grep ":$SERVER_PORT " > /dev/null; then
         echo -e "${YELLOW}Server not running on port $SERVER_PORT. Starting server...${RESET}"
         cd ..
-        ./webserv $CONFIG_FILE &
+        # Redirect server output to a log file instead of mixing with our script output
+        ./webserv $CONFIG_FILE > ./server_log.txt 2>&1 &
         SERVER_PID=$!
         echo -e "${GREEN}Server started with PID: $SERVER_PID${RESET}"
         sleep 2  # Give the server time to start
@@ -65,12 +66,18 @@ analyze_results() {
         echo -e "${RED}✗ Server crashed during the test${RESET}"
     fi
     
-    OPEN_CONNECTIONS=$(netstat -tn | grep ":$SERVER_PORT " | wc -l)
-    
-    if [ "$OPEN_CONNECTIONS" -gt 100 ]; then
-        echo -e "${RED}✗ Potential hanging connections detected: $OPEN_CONNECTIONS connections are still open${RESET}"
+    # Use a fallback when netstat is not available
+    if command -v netstat &> /dev/null; then
+        OPEN_CONNECTIONS=$(netstat -tn | grep ":$SERVER_PORT " | wc -l)
+        
+        if [ "$OPEN_CONNECTIONS" -gt 100 ]; then
+            echo -e "${RED}✗ Potential hanging connections detected: $OPEN_CONNECTIONS connections are still open${RESET}"
+        else
+            echo -e "${GREEN}✓ No hanging connections detected ($OPEN_CONNECTIONS open connections)${RESET}"
+        fi
     else
-        echo -e "${GREEN}✓ No hanging connections detected ($OPEN_CONNECTIONS open connections)${RESET}"
+        echo -e "${YELLOW}⚠️ netstat command not found. Cannot check for hanging connections.${RESET}"
+        echo -e "${YELLOW}⚠️ Consider installing net-tools package: sudo apt install net-tools${RESET}"
     fi
     
     echo -e "\n${YELLOW}Test completed. Check the Siege output for availability percentage.${RESET}"
@@ -79,6 +86,7 @@ analyze_results() {
 
 echo -e "${GREEN}=== Webserv Stress Test ===${RESET}"
 echo -e "Testing server on port: $SERVER_PORT"
+
 
 check_server
 monitor_memory &
