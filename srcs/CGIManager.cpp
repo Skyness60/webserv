@@ -149,8 +149,9 @@ static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodyS
 void CGIManager::executeCGI(int client_fd, const std::string &method) {
 	(void)client_fd;
 	(void)method;
-	int pipe_fd[2];
-	if (pipe(pipe_fd) == -1) {
+	int pipe_in[2];
+	int pipe_out[2];
+	if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
 		perror("pipe");
 		return;
 	}
@@ -161,9 +162,10 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 	}
 	if (pid == 0) {
 		char **env = createEnvArray();
-		close(pipe_fd[0]);
-		dup2(pipe_fd[1], STDOUT_FILENO);
-		close(pipe_fd[1]);
+		dup2(pipe_in[0], STDIN_FILENO);
+		dup2(pipe_out[1], STDOUT_FILENO);
+		close(pipe_in[0]);
+		close(pipe_out[1]);
 		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
 		char *args[3];
 		args[0] = new char[this->_path.size() + 1];
@@ -181,18 +183,17 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		exit(EXIT_FAILURE);
 	}
 	else{
-		close(pipe_fd[1]);
-		char buffer[1024];
+		close(pipe_in[0]);
+		close(pipe_out[1]);
+		const std::string &body = _request.getBody();
+		write(pipe_in[1], body.c_str(), body.size());
+		close(pipe_in[1]);
+		char buffer[4096];
 		ssize_t bytesRead;
 		std::string cgiOutput;
-		while ((bytesRead = read(pipe_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
-			buffer[bytesRead] = '\0';
-			cgiOutput += buffer;
-		}
-		if (bytesRead == -1) {
-			perror("read");
-		}
-		close(pipe_fd[0]);
+		while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0)
+			cgiOutput.append(buffer, bytesRead);
+		close(pipe_out[0]);
 		int status;
 		waitpid(pid, &status, 0);
 		std::cout << "----- CGI OUTPUT BEGIN -----" << std::endl;
