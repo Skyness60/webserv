@@ -123,45 +123,48 @@ void Response::dealDelete() {
     }
 }
 
-void Response::dealPost(){
+void Response::dealPost() {
+	std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
-    std::string fullPath = "./www" + requestPath;
+    std::string fullPath = this->_config.getLocationValue(_indexServ, "location " + requestPath, "root") + requestPath;
+	if (fullPath.empty()) {
+		fullPath = this->_config.getConfigValue(_indexServ, "root") + requestPath;
+	}
 
-   if (requestPath != "/Playlist/playlist.txt") {
-		safeSend(405, "Method Not Allowed", "The requested method is not allowed for this resource.", "text/plain");
+    if (isCGI(requestPath)) {
+        CGIManager cgi(_config, _indexServ, this->_request);
+        cgi.executeCGI(_client_fd, this->_request.getMethod());
         return;
     }
-    
+
+
     size_t lastSlashPos = fullPath.find_last_of('/');
     if (lastSlashPos != std::string::npos) {
         std::string dirPath = fullPath.substr(0, lastSlashPos);
         std::string mkdirCmd = "mkdir -p " + dirPath;
         system(mkdirCmd.c_str());
     }
-    
+
     std::ofstream out(fullPath.c_str(), std::ios::trunc);
-    if (out.is_open()){
+    if (out.is_open()) {
         if (this->_requestHeaders.find("Content-Type") != this->_requestHeaders.end() &&
-            this->_requestHeaders.at("Content-Type") == "application/x-www-form-urlencoded"){
+            this->_requestHeaders.at("Content-Type") == "application/x-www-form-urlencoded") {
             std::map<std::string, std::string> formData = this->_request.getFormData();
-            for (std::map<std::string, std::string>::iterator it = formData.begin(); it != formData.end(); it++){
+            for (std::map<std::string, std::string>::iterator it = formData.begin(); it != formData.end(); it++) {
                 out << it->first << " : " << it->second << std::endl;
             }
-        }
-        else {    
+        } else {
             std::cout << "Writing body data to file" << std::endl;
             out << this->_requestBody;
-            out.flush(); 
+            out.flush();
         }
         out.close();
         safeSend(201, "Created", "File created successfully.", "text/plain");
-    }
-    else {
+    } else {
         std::string errorMsg = "Failed to open file for writing: " + fullPath;
         safeSend(500, "Internal Server Error", errorMsg, "text/plain");
     }
 }
-
 
 void Response::safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType) {
     std::ostringstream response;
