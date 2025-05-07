@@ -13,7 +13,7 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request) 
 		extension = _config.getLocationValue(serverIndex, *it, "cgi_extension");
 		root = _config.getLocationValue(serverIndex, *it, "cgi_root");
 	
-		if (!path.empty() and !extension.empty() and !root.empty())
+		if (!extension.empty() and !root.empty())
 		{
 			_path = path;
 			_extension = extension;
@@ -21,7 +21,7 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request) 
 			_locationName = *it;
 			break;
 		}
-		else if (!path.empty() && !extension.empty())
+		else if (!extension.empty())
 		{
 			_path = path;
 			_extension = extension;
@@ -161,20 +161,53 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		return;
 	}
 	if (pid == 0) {
+		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
+		std::ifstream scriptFile(scriptPath.c_str());
+		if (!scriptFile.is_open()) {
+			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		std::string shebang;
+		std::getline(scriptFile, shebang);
+		if (shebang.substr(0, 2) != "#!" and this->_path.empty()) {
+			std::cerr << "Error: Invalid CGI script: " << scriptPath << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		else if (shebang.substr(0, 2) == "#!" and this->_path.empty()) {
+			std::string interpreter = shebang.substr(2);
+			size_t pos = interpreter.find_first_of(" \t");
+			if (pos != std::string::npos) {
+				interpreter = interpreter.substr(0, pos);
+			}
+			this->_path = interpreter;
+		}
+		scriptFile.close();
+		if (this->_path.empty()) {
+			std::cerr << "Error: No interpreter found for script: " << scriptPath << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		std::cout << "Interpreter path: " << this->_path << std::endl;
+		struct stat pathStat;
+		if (stat(this->_path.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+			std::cerr << "Error: CGI interpreter path is a directory: " << this->_path << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		if (access(this->_path.c_str(), F_OK) == -1 || access(this->_path.c_str(), X_OK) == -1) {
+			std::cerr << "Error: CGI interpreter not found or not executable: " << this->_path << std::endl;
+			exit(EXIT_FAILURE);
+		}
 		char **env = createEnvArray();
 		dup2(pipe_in[0], STDIN_FILENO);
 		dup2(pipe_out[1], STDOUT_FILENO);
 		close(pipe_in[0]);
 		close(pipe_out[1]);
-		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
+		std::cout << "Script path: " << scriptPath << std::endl;
 		char *args[3];
 		args[0] = new char[this->_path.size() + 1];
 		strcpy(args[0], this->_path.c_str());
 		args[1] = new char[scriptPath.size() + 1];
 		strcpy(args[1], scriptPath.c_str());
 		args[2] = NULL;
-		//std::cout << "Executing CGI script: " << args[1] << std::endl;
-		//std::cout << "CGI path: " << this->_path << std::endl;
 		execve(this->_path.c_str(), args, env);
 		perror("execl");
 		delete [] args[0];
@@ -196,10 +229,16 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		close(pipe_out[0]);
 		int status;
 		waitpid(pid, &status, 0);
+		if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+			std::cerr << "CGI script exited with status: " << WEXITSTATUS(status) << std::endl;
+			std::string errorMsg = "CGI script failed with status: " + std::to_string(WEXITSTATUS(status));
+			send(client_fd, errorMsg.c_str(), errorMsg.length(), 0);
+			return;
+		}
 		std::cout << "----- CGI OUTPUT BEGIN -----" << std::endl;
 		std::cout << cgiOutput << std::endl;
 		std::cout << "----- CGI OUTPUT END   -----" << std::endl;
-				std::pair<std::string, std::string> parsed = parseCGIResponse(cgiOutput);
+		std::pair<std::string, std::string> parsed = parseCGIResponse(cgiOutput);
 		std::string response = "HTTP/1.1 200 OK\r\n";
 		response += buildFinalHeaders(parsed.first, parsed.second.size());
 		response += "\r\n";
