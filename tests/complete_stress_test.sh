@@ -7,18 +7,18 @@ BLUE="\033[0;34m"
 RESET="\033[0m"
 
 # Configuration
-CONFIG_FILE="../config/webserv.conf"
+CONFIG_FILE="./config/webserv.conf"
 SERVER_HOST="localhost"
 BASE_PORT=2222
 SECOND_PORT=2282
 
 make_scripts_executable() {
-    chmod +x ./stress_test.sh
+    chmod +x ./complete_stress_test.sh
 }
 
 test_availability() {
     echo -e "\n${BLUE}=== Testing Basic Availability (should be >99.5%) ===${RESET}"
-    ./stress_test.sh $BASE_PORT
+    ./complete_stress_test.sh $BASE_PORT
 }
 
 test_concurrent_connections() {
