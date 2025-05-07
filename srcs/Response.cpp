@@ -51,6 +51,35 @@ static std::string getContentType(const std::string &path) {
     return "application/octet-stream";
 }
 
+std::string Response::getFullPath(const std::string& requestPath) {
+    std::string root = this->_config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "root");
+    if (root.empty()) {
+        root = this->_config.getConfigValue(_indexServ, "root");
+    }
+    std::cout << "Root path: " << root << std::endl;
+    
+    if (requestPath.length() > 0 && requestPath[0] == '/') {
+        return root + requestPath;
+    } else {
+        return root + "/" + requestPath;
+    }
+}
+
+bool Response::ensureDirectoryExists(const std::string& fullPath) {
+    size_t lastSlashPos = fullPath.find_last_of('/');
+    if (lastSlashPos != std::string::npos) {
+        std::string dirPath = fullPath.substr(0, lastSlashPos);
+        std::string mkdirCmd = "mkdir -p " + dirPath;
+        std::cout << "Creating directory with command: " << mkdirCmd << std::endl;
+        int result = system(mkdirCmd.c_str());
+        if (result != 0) {
+            std::cout << "Failed to create directory: " << dirPath << " (Error code: " << result << ")" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
 void Response::dealGet() {
     std::string root = this->_config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "root");
 	std::cout << "root :" << root << std::endl;
@@ -109,42 +138,56 @@ void Response::dealGet() {
 }
 
 void Response::dealDelete() {
-    std::string fullPath = "./www" + this->_request.getPath();
+    std::cout << "DELETE request received" << std::endl;
+    std::string requestPath = this->_requestPath;
+    std::cout << "REQUETE DELETE: " << requestPath << std::endl;
+    
+    std::string fullPath = getFullPath(requestPath);
+    std::cout << "Full path for deletion: " << fullPath << std::endl;
 
     if (access(fullPath.c_str(), F_OK) != 0) {
+        std::cout << "File not found: " << fullPath << std::endl;
         safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
         return;
     }
 
     if (remove(fullPath.c_str()) == 0) {
+        std::cout << "File deleted successfully: " << fullPath << std::endl;
         safeSend(200, "OK", "File deleted successfully.", "text/plain");
     } else {
+        std::cout << "Failed to delete file: " << fullPath << " (Error: " << strerror(errno) << ")" << std::endl;
         safeSend(500, "Internal Server Error", "Failed to delete the file.", "text/plain");
     }
 }
 
 void Response::dealPost() {
-	std::cout << "POST request received" << std::endl;
+    std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
-    std::string fullPath = this->_config.getLocationValue(_indexServ, "location " + requestPath, "root") + requestPath;
-	if (fullPath.empty()) {
-		fullPath = this->_config.getConfigValue(_indexServ, "root") + requestPath;
-	}
-
+    std::cout << "REQUETE : " << requestPath << std::endl;
+    
+    std::string fullPath = getFullPath(requestPath);
+    std::cout << "Full path for saving: " << fullPath << std::endl;
+    
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
         return;
     }
-
-
-    size_t lastSlashPos = fullPath.find_last_of('/');
-    if (lastSlashPos != std::string::npos) {
-        std::string dirPath = fullPath.substr(0, lastSlashPos);
-        std::string mkdirCmd = "mkdir -p " + dirPath;
-        system(mkdirCmd.c_str());
+    
+    if (!ensureDirectoryExists(fullPath)) {
+        safeSend(500, "Internal Server Error", "Failed to create directory for writing.", "text/plain");
+        return;
     }
 
+    if (access(fullPath.c_str(), F_OK) == 0) {
+        std::cout << "File exists, removing it before creating new one: " << fullPath << std::endl;
+        if (remove(fullPath.c_str()) != 0) {
+            std::cout << "Warning: Could not remove existing file: " << strerror(errno) << std::endl;
+        }
+    }
+
+    usleep(50000);
+    
     std::ofstream out(fullPath.c_str(), std::ios::trunc);
     if (out.is_open()) {
         if (this->_requestHeaders.find("Content-Type") != this->_requestHeaders.end() &&
@@ -159,9 +202,13 @@ void Response::dealPost() {
             out.flush();
         }
         out.close();
+        chmod(fullPath.c_str(), 0666);
+        
+        std::cout << "File created successfully: " << fullPath << std::endl;
         safeSend(201, "Created", "File created successfully.", "text/plain");
     } else {
-        std::string errorMsg = "Failed to open file for writing: " + fullPath;
+        std::string errorMsg = "Failed to open file for writing: " + fullPath + " (Error: " + strerror(errno) + ")";
+        std::cout << errorMsg << std::endl;
         safeSend(500, "Internal Server Error", errorMsg, "text/plain");
     }
 }
