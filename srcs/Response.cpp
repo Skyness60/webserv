@@ -73,6 +73,7 @@ void Response::dealGet() {
     if (isCGI(this->_request.getPath())) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
+		close(_client_fd);
         return;
     }
 
@@ -134,6 +135,7 @@ void Response::dealPost() {
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
+		close(_client_fd);
         return;
     }
 
