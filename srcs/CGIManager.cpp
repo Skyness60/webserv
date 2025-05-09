@@ -92,10 +92,10 @@ char **CGIManager::createEnvArray() {
 std::pair<std::string, std::string> CGIManager::parseCGIResponse(const std::string &cgiOutput)
 {
 	size_t headerEnd = cgiOutput.find("\r\n\r\n");
-	size_t skip = 4;
+	//size_t skip = 4;
 	if (headerEnd == std::string::npos) {
 		headerEnd = cgiOutput.find("\n\n");
-		skip = 2;
+		//skip = 2;
 	}
 	if (headerEnd == std::string::npos) {
 		return std::make_pair("", cgiOutput);
@@ -205,6 +205,12 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		response += "\r\n";
 		response += parsed.second;
 		send(client_fd, response.c_str(), response.length(), 0);
+		
+		// Properly close the connection after sending the response
+		if (shutdown(client_fd, SHUT_RDWR) < 0) {
+			std::cerr << "Shutdown error on client_fd " << client_fd << ": " << strerror(errno) << std::endl;
+		}
+		close(client_fd);
 	}
 }
 
