@@ -70,6 +70,32 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
         return;
     }
 
+    // Retrieve the port of the incoming connection
+    struct sockaddr_in server_address;
+    socklen_t server_len = sizeof(server_address);
+    if (getsockname(server_fd, (struct sockaddr *)&server_address, &server_len) == -1) {
+        perror("getsockname");
+        close(client_fd);
+        return;
+    }
+    int incomingPort = ntohs(server_address.sin_port);
+
+    // Match the port with the correct server index
+    for (int i = 0; i < getServersCount(); ++i) {
+        std::string listenValue = getConfigValue(i, "listen");
+		if (!listenValue.empty())
+		{
+			int configuredPort = std::stoi(listenValue);
+        	if (configuredPort == incomingPort) {
+            	_port = i;
+           		break;
+        	}
+		}
+
+
+    }
+
+
     fcntl(client_fd, F_SETFL, O_NONBLOCK);
 
     struct epoll_event client_event;
@@ -81,8 +107,9 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
         return;
     }
 
-    std::cout << "Nouveau client connecté: " << client_fd << std::endl;
+    std::cout << "Nouveau client connecté: " << client_fd << " sur le port: " << incomingPort << " (Server Index: " << _port << ")" << std::endl;
 }
+
 
 // Gère une requête client
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
@@ -135,7 +162,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
     else {
         ClientRequest request;
         if (request.parse(fullRequest, &ddosProtector)) {          
-            Response response(client_fd, request, _config, 0);
+            Response response(client_fd, request, _config, this->_port);
             response.oriente();
         }
         else {

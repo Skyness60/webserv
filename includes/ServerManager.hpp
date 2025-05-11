@@ -7,6 +7,7 @@ class ServerManager {
 	private:
 		std::string _filename;
 		Config _config;
+		int _port;
 		int createAndBindSocket(int serverIndex);
 		struct sockaddr_in getServerAddress(int serverIndex);
 		int setupEpollInstance(const std::vector<int> &server_fds);
