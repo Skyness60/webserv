@@ -27,7 +27,7 @@ ServerManager &ServerManager::operator=(const ServerManager &copy) {
 // Destructeur
 ServerManager::~ServerManager() {
     // Implémentation du destructeur
-}
+} 
 
 // Charge la configuration à partir du fichier
 void ServerManager::loadConfig() {
