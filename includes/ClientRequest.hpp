@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.hpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
+/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/04/29 17:23:40 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/05/13 14:29:01 by olly             ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,7 +18,7 @@ class DdosProtection;
 
 #define REQUEST_DEFAULT_HEADER_TIMEOUT 10  // 10 seconds for headers
 #define REQUEST_DEFAULT_BODY_TIMEOUT 30    // 30 seconds for body
-#define REQUEST_MAX_BODY_SIZE 10485760     // 10MB default max body size
+#define REQUEST_MAX_BODY_SIZE 104857600    // 100MB default max body size
 
 class ClientRequest {
     
