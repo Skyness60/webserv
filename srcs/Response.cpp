@@ -52,7 +52,7 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-    std::string root = this->_config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "root");
+    std::string root = this->_config.getLocationValue(_indexServ,  this->_request.getPath(), "root");
 	std::cout << "root :" << root << std::endl;
     if (root.empty()) {
         root = this->_config.getConfigValue(_indexServ, "root");
@@ -63,7 +63,7 @@ void Response::dealGet() {
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "index");
+        std::string indexFile = _config.getLocationValue(_indexServ,  this->_request.getPath(), "index");
 		std::cout << "indexFile :" << indexFile << std::endl;
         if (indexFile.empty()) {
             indexFile = _config.getConfigValue(_indexServ, "index");
@@ -134,7 +134,7 @@ void Response::dealDelete() {
 void Response::dealPost() {
 	std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
-    std::string fullPath = this->_config.getLocationValue(_indexServ, "location " + requestPath, "root") + requestPath;
+    std::string fullPath = this->_config.getLocationValue(_indexServ,  requestPath, "root") + requestPath;
 	if (fullPath.empty()) {
 		fullPath = this->_config.getConfigValue(_indexServ, "root") + requestPath;
 	}

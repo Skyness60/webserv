@@ -31,7 +31,7 @@ int SocketManager::createAndBindSocket(int serverIndex, const std::string &liste
         return -1;
     }
 
-    if (listen(server_fd, 10) == -1) {
+    if (listen(server_fd, 512) == -1) {
         std::cerr << "Erreur : Impossible de mettre en écoute le socket pour le serveur " << serverIndex << " au port " << port << ". Serveur ignoré." << std::endl;
         close(server_fd);
         return -1;
