@@ -14,11 +14,12 @@ class Response{
 	private :
 		int _client_fd;
 		Config	&_config;
-		std::pair<std::string, void (Response::*)()> _func[3];
+		std::pair<std::string, void (Response::*)()> _func[4];
 		ClientRequest &_request;
 		int _indexServ;
 		bool isCGI(std::string path);
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
+		void headSend(int statusCode, const std::string &statusMessage, const std::string &contentType = "text/html", size_t contentLength = 0);
 		std::string _requestMethod;
 		std::string _requestPath;
 		std::map<std::string, std::string> _requestHeaders;
@@ -34,5 +35,6 @@ class Response{
 		void dealGet();
 		void dealPost();
 		void dealDelete();
+		void dealHead();
 		void oriente();
 };
