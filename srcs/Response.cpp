@@ -147,7 +147,7 @@ void Response::dealDelete() {
     std::string requestPath = this->_requestPath;
     std::cout << "REQUETE DELETE: " << requestPath << std::endl;
     
-    std::string fullPath = getFullPath(requestPath);
+    std::string fullPath = this->_config.getLocationValue(_indexServ,  requestPath, "root") + requestPath;
     std::cout << "Full path for deletion: " << fullPath << std::endl;
 
     if (access(fullPath.c_str(), F_OK) != 0) {
@@ -179,8 +179,8 @@ void Response::dealPost() {
 		close(_client_fd);
         return;
     }
-    
-    if (!ensureDirectoryExists(fullPath)) {
+
+    if (!fullPath.empty()) {
         safeSend(500, "Internal Server Error", "Failed to create directory for writing.", "text/plain");
         return;
     }
