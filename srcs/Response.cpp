@@ -93,6 +93,7 @@ void Response::dealGet() {
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
         std::string indexFile = _config.getLocationValue(_indexServ, "location " + this->_request.getPath(), "index");
+		std::cout << "indexFile :" << indexFile << std::endl;
         if (indexFile.empty()) {
             indexFile = _config.getConfigValue(_indexServ, "index");
         }
@@ -102,6 +103,7 @@ void Response::dealGet() {
     if (isCGI(this->_request.getPath())) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
+		close(_client_fd);
         return;
     }
 
@@ -109,16 +111,22 @@ void Response::dealGet() {
     if (!file.is_open()) {
         std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
         if (!errorPage.empty()) {
-            std::string errorCode = errorPage.substr(0, errorPage.find(' '));
-            std::string errorFile = errorPage.substr(errorPage.find(' ') + 1);
-            if (errorCode == "404") {
-                fullPath = "./www/" + errorFile;
-                if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-                    safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
-                    return;
-                }
-                file.open(fullPath.c_str(), std::ios::binary);
-                if (!file.is_open()) {
+            size_t spacePos = errorPage.find(' ');
+            if (spacePos != std::string::npos) {
+                std::string errorCode = errorPage.substr(0, spacePos);
+                std::string errorFile = errorPage.substr(spacePos + 1);
+                if (errorCode == "404") {
+                    fullPath = "./www/" + errorFile;
+                    if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+                        safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
+                        return;
+                    }
+                    file.open(fullPath.c_str(), std::ios::binary);
+                    if (!file.is_open()) {
+                        safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+                        return;
+                    }
+                } else {
                     safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
                     return;
                 }
@@ -171,6 +179,7 @@ void Response::dealPost() {
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
+		close(_client_fd);
         return;
     }
     
@@ -245,10 +254,13 @@ void Response::oriente() {
     safeSend(405, "Method Not Allowed", "The requested method is not supported.", "text/plain");
 }
 
-bool Response::isCGI(std::string path) {\
+bool Response::isCGI(std::string path) {
 	for (size_t i = 0; i < this->_config.getLocationName(_indexServ).size(); i++) {
 		std::string location = this->_config.getLocationName(_indexServ)[i];
-		location = location.substr(9);
+		if (location.size() >= 9)
+			location = location.substr(9);
+		else
+			continue;
 		if (path.find(location) != std::string::npos) {
 			std::cout << "REQUETE : " << this->_request.getPath() << std::endl;
 			if (path.find(".py") != std::string::npos) {
