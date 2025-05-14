@@ -24,8 +24,8 @@
         <div class="playlist-management">
             <div class="playlist-actions">
                 <button id="savePlaylistBtn" class="btn btn--small">Save Playlist</button>
-                <button id="showPlaylistBtn" class="btn btn--small">Show Playlist</button>
                 <button id="deletePlaylistBtn" class="btn btn--small">Delete Playlist</button>
+                <button id="downloadPlaylistBtn" class="btn btn--small btn--download">Download Playlist 💾</button>
             </div>
         </div>
         
@@ -88,8 +88,8 @@
             const glitterContainer = document.getElementById('glitter');
             const statusMessage = document.getElementById('statusMessage');
             const savePlaylistBtn = document.getElementById('savePlaylistBtn');
-            const showPlaylistBtn = document.getElementById('showPlaylistBtn');
             const deletePlaylistBtn = document.getElementById('deletePlaylistBtn');
+            const downloadPlaylistBtn = document.getElementById('downloadPlaylistBtn');
             
             const PLAYLIST_ID = 'britney_playlist';
             
@@ -113,12 +113,12 @@
                 savePlaylistToFile(PLAYLIST_ID);
             });
             
-            showPlaylistBtn.addEventListener('click', function() {
-                showPlaylistContents();
-            });
-            
             deletePlaylistBtn.addEventListener('click', function() {
                 deletePlaylistFile(PLAYLIST_ID);
+            });
+            
+            downloadPlaylistBtn.addEventListener('click', function() {
+                downloadPlaylist(PLAYLIST_ID);
             });
             
             function addSong() {
@@ -316,8 +316,45 @@
                     return;
                 }
                 
-                const songList = songs.map((song, index) => `${index + 1}. ${song}`).join('\n');
-                alert(`Your Britney Playlist:\n\n${songList}`);
+                // Create a styled dialog exactly like the download dialog
+                const formatDialog = document.createElement('div');
+                formatDialog.className = 'format-dialog';
+                formatDialog.innerHTML = `
+                    <div class="format-dialog-content">
+                        <h3>My Britney Playlist ✨</h3>
+                        <div class="playlist-content">
+                            ${songs.map((song, index) => `<p>${index + 1}. ${song}</p>`).join('')}
+                        </div>
+                        <button class="format-cancel-btn">Close</button>
+                    </div>
+                `;
+                document.body.appendChild(formatDialog);
+                
+                // Add styles for the dialog - using same style as download dialog
+                const style = document.createElement('style');
+                style.textContent = `
+                    .playlist-content {
+                        text-align: left;
+                        margin: 15px 0;
+                        background-color: rgba(255, 102, 196, 0.1);
+                        padding: 15px;
+                        border-radius: 8px;
+                        max-height: 200px;
+                        overflow-y: auto;
+                    }
+                    .playlist-content p {
+                        margin: 8px 0;
+                        font-size: 1.1em;
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                // Handle the close button
+                const cancelButton = formatDialog.querySelector('.format-cancel-btn');
+                cancelButton.addEventListener('click', function() {
+                    document.body.removeChild(formatDialog);
+                    document.head.removeChild(style);
+                });
             }
             
             function savePlaylist(playlistId) {
@@ -443,6 +480,178 @@
                 } catch (err) {
                     console.error('Error deleting playlist:', err);
                     showStatus('Error deleting playlist! Please try again. 😞', 'error');
+                }
+            }
+            
+            function downloadPlaylist(playlistId) {
+                try {
+                    // Get the playlist data from localStorage
+                    const playlistData = JSON.parse(localStorage.getItem(playlistId) || '{"name":"My Britney Playlist","songs":[]}');
+                    
+                    // Create a format selection dialog
+                    const formatDialog = document.createElement('div');
+                    formatDialog.className = 'format-dialog';
+                    formatDialog.innerHTML = `
+                        <div class="format-dialog-content">
+                            <h3>Choose Download Format</h3>
+                            <div class="format-options">
+                                <button class="format-btn" data-format="json">JSON</button>
+                                <button class="format-btn" data-format="txt">Text</button>
+                                <button class="format-btn" data-format="csv">CSV</button>
+                            </div>
+                            <button class="format-cancel-btn">Cancel</button>
+                        </div>
+                    `;
+                    document.body.appendChild(formatDialog);
+                    
+                    // Add styles for the dialog
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .format-dialog {
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            background-color: rgba(0, 0, 0, 0.7);
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            z-index: 1000;
+                        }
+                        .format-dialog-content {
+                            background-color: #fff;
+                            border-radius: 10px;
+                            padding: 20px;
+                            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+                            text-align: center;
+                            max-width: 400px;
+                            width: 90%;
+                            animation: fadeIn 0.3s ease-out;
+                        }
+                        .format-dialog h3 {
+                            color: #ff66c4;
+                            margin-top: 0;
+                            font-size: 1.5em;
+                        }
+                        .format-options {
+                            display: flex;
+                            justify-content: center;
+                            gap: 10px;
+                            margin: 20px 0;
+                        }
+                        .format-btn {
+                            background-color: #ff66c4;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 10px 20px;
+                            font-size: 1em;
+                            cursor: pointer;
+                            transition: background-color 0.2s;
+                        }
+                        .format-btn:hover {
+                            background-color: #e44dac;
+                        }
+                        .format-cancel-btn {
+                            background-color: #999;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 10px 20px;
+                            font-size: 1em;
+                            cursor: pointer;
+                            transition: background-color 0.2s;
+                            margin-top: 10px;
+                        }
+                        .format-cancel-btn:hover {
+                            background-color: #777;
+                        }
+                        @keyframes fadeIn {
+                            from { opacity: 0; transform: translateY(-20px); }
+                            to { opacity: 1; transform: translateY(0); }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    
+                    // Handle format selection
+                    const formatButtons = formatDialog.querySelectorAll('.format-btn');
+                    formatButtons.forEach(button => {
+                        button.addEventListener('click', function() {
+                            const format = this.getAttribute('data-format');
+                            let fileContent, mimeType, fileName;
+                            
+                            // Add timestamp to the data
+                            playlistData.downloadedAt = new Date().toISOString();
+                            
+                            switch(format) {
+                                case 'json':
+                                    fileContent = JSON.stringify(playlistData, null, 2);
+                                    mimeType = 'application/json';
+                                    fileName = 'britney_playlist.json';
+                                    break;
+                                case 'txt':
+                                    fileContent = `My Britney Playlist\n\n`;
+                                    if (playlistData.songs && playlistData.songs.length > 0) {
+                                        playlistData.songs.forEach((song, index) => {
+                                            fileContent += `${index + 1}. ${song}\n`;
+                                        });
+                                    } else {
+                                        fileContent += 'No songs in the playlist.\n';
+                                    }
+                                    fileContent += `\nDownloaded on: ${new Date().toLocaleString()}`;
+                                    mimeType = 'text/plain';
+                                    fileName = 'britney_playlist.txt';
+                                    break;
+                                case 'csv':
+                                    fileContent = 'Number,Song\n';
+                                    if (playlistData.songs && playlistData.songs.length > 0) {
+                                        playlistData.songs.forEach((song, index) => {
+                                            fileContent += `${index + 1},"${song}"\n`;
+                                        });
+                                    }
+                                    mimeType = 'text/csv';
+                                    fileName = 'britney_playlist.csv';
+                                    break;
+                            }
+                            
+                            // Create a blob with the data
+                            const blob = new Blob([fileContent], { type: mimeType });
+                            
+                            // Create a URL for the blob
+                            const url = URL.createObjectURL(blob);
+                            
+                            // Create a temporary link element
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = fileName;
+                            
+                            // Append the link to the body (required for Firefox)
+                            document.body.appendChild(a);
+                            
+                            // Programmatically click the link to trigger the download
+                            a.click();
+                            
+                            // Clean up
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            document.body.removeChild(formatDialog);
+                            document.head.removeChild(style);
+                            
+                            showStatus(`Playlist downloaded as ${format.toUpperCase()} successfully! 💾`, 'success');
+                        });
+                    });
+                    
+                    // Handle cancel button
+                    const cancelButton = formatDialog.querySelector('.format-cancel-btn');
+                    cancelButton.addEventListener('click', function() {
+                        document.body.removeChild(formatDialog);
+                        document.head.removeChild(style);
+                    });
+                    
+                } catch (err) {
+                    console.error('Error downloading playlist:', err);
+                    showStatus('Error downloading playlist! Please try again. 😞', 'error');
                 }
             }
         });
