@@ -165,8 +165,17 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             Response response(client_fd, request, _config, this->_port);
             response.oriente();
         }
-        else {
+        else { // to check with Sami if we can implement this handling in response.oriente();
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
+            std::string errorResponse = "HTTP/1.1 400 Bad Request\r\n";
+            errorResponse += "Content-Type: text/html\r\n";
+            errorResponse += "Connection: close\r\n";
+            errorResponse += "\r\n";
+    
+            send(client_fd, errorResponse.c_str(), errorResponse.size(), 0);
+            std::cerr << "Fermeture de la connexion après erreur 400: " << client_fd << std::endl;
+            close(client_fd);
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         }
     }
 }

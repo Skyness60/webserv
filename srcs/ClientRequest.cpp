@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   ClientRequest.cpp                                  :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: sami <sami@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/05 23:18:59 by sami             ###   ########.fr       */
+/*   Updated: 2025/05/14 15:48:08 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -84,6 +84,8 @@ std::string ClientRequest::getContentType() const {
 void ClientRequest::parseHeaders( std::istringstream & stream ) {
     
     std::string line;
+    std::set<std::string> seenHeaders;
+    
     while (std::getline(stream, line) && !line.empty()) {
         if (!line.empty() && line[line.size() - 1] == '\r')
             line.erase(line.size() - 1);
@@ -94,6 +96,17 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
         if (colon_pos != std::string::npos) {
             std::string key = line.substr(0, colon_pos);
             size_t value_pos = line.find_first_not_of(" \t", colon_pos + 1);
+            
+            if (key == "Content-Length" || key == "Host" || key == "Content-Type") {
+                if (seenHeaders.find(key) != seenHeaders.end()) {
+                    _headers.clear();
+                    _headers["Invalid-Request"] = "Duplicate " + key + " header";
+                    std::cout << "Detected duplicate header: " << key << std::endl;
+                    return;
+                }
+                seenHeaders.insert(key);
+            }
+            
             if (value_pos != std::string::npos) {
                 std::string value = line.substr(value_pos);
                 _headers[key] = value;
@@ -113,6 +126,10 @@ bool ClientRequest::parse( std::string const & rawRequest, DdosProtection* ddosP
         return (false);
     
     parseHeaders(request_stream);
+    
+    if (_headers.find("Invalid-Request") != _headers.end()) {
+        return (false);
+    }
 
     if (ddosProtector && !ddosProtector->isBodySizeValid(_headers, ddosProtector->getMaxBodySize())) {
         return (false);

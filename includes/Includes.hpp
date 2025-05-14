@@ -38,3 +38,4 @@
 #include <functional>           // std::function
 #include <ctime>
 //#include <sys/event.h>		// for MAC
+#include <set>                  // std::set
