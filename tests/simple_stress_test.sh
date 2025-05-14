@@ -22,11 +22,10 @@ check_server() {
     if ! netstat -tuln | grep ":$SERVER_PORT " > /dev/null; then
         echo -e "${YELLOW}Server not running on port $SERVER_PORT. Starting server...${RESET}"
         cd ..
-        # Redirect server output to a log file instead of mixing with our script output
         ./webserv $CONFIG_FILE > ./server_log.txt 2>&1 &
         SERVER_PID=$!
         echo -e "${GREEN}Server started with PID: $SERVER_PID${RESET}"
-        sleep 2  # Give the server time to start
+        sleep 2 
         cd tests
     else
         echo -e "${GREEN}Server already running on port $SERVER_PORT${RESET}"
@@ -66,22 +65,26 @@ analyze_results() {
         echo -e "${RED}✗ Server crashed during the test${RESET}"
     fi
     
-    # Use a fallback when netstat is not available
     if command -v netstat &> /dev/null; then
         OPEN_CONNECTIONS=$(netstat -tn | grep ":$SERVER_PORT " | wc -l)
         
-        if [ "$OPEN_CONNECTIONS" -gt 100 ]; then
-            echo -e "${RED}✗ Potential hanging connections detected: $OPEN_CONNECTIONS connections are still open${RESET}"
+        echo -e "${YELLOW}Waiting 5 seconds for connections to close naturally...${RESET}"
+        sleep 5
+        
+        OPEN_CONNECTIONS_AFTER_WAIT=$(netstat -tn | grep ":$SERVER_PORT " | wc -l)
+        
+        if [ "$OPEN_CONNECTIONS_AFTER_WAIT" -gt 10 ]; then
+            echo -e "${RED}✗ Potential hanging connections detected: $OPEN_CONNECTIONS_AFTER_WAIT connections are still open${RESET}"
+            echo -e "${YELLOW}First 10 hanging connections:${RESET}"
+            netstat -tn | grep ":$SERVER_PORT " | head -10
         else
-            echo -e "${GREEN}✓ No hanging connections detected ($OPEN_CONNECTIONS open connections)${RESET}"
+            echo -e "${GREEN}✓ No hanging connections detected ($OPEN_CONNECTIONS_AFTER_WAIT open connections)${RESET}"
         fi
     else
         echo -e "${YELLOW}⚠️ netstat command not found. Cannot check for hanging connections.${RESET}"
-        echo -e "${YELLOW}⚠️ Consider installing net-tools package: sudo apt install net-tools${RESET}"
     fi
     
-    echo -e "\n${YELLOW}Test completed. Check the Siege output for availability percentage.${RESET}"
-    echo -e "${YELLOW}Availability should be above 99.5% to pass the correction requirements.${RESET}"
+    echo -e "\n${YELLOW}Test completed. Availability should be above 99.5%.${RESET}"
 }
 
 echo -e "${GREEN}=== Webserv Stress Test ===${RESET}"
