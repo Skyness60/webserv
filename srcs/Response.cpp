@@ -117,7 +117,35 @@ void Response::dealGet() {
 }
 
 void Response::dealDelete() {
-    std::string fullPath = "./www" + this->_request.getPath();
+    std::string requestPath = this->_requestPath;
+    
+    std::string rootPath = "";
+    rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
+    
+    if (rootPath.empty()) {
+        size_t lastSlash = requestPath.find_last_of('/');
+        if (lastSlash != std::string::npos && lastSlash > 0) {
+            std::string parentPath = requestPath.substr(0, lastSlash + 1);
+            rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            
+            if (rootPath.empty() && lastSlash > 0) {
+                parentPath = requestPath.substr(0, lastSlash);
+                rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            }
+        }
+    }
+    
+    if (rootPath.empty()) {
+        rootPath = this->_config.getConfigValue(_indexServ, "root");
+    }
+    
+    std::string fileName = requestPath;
+    size_t lastSlash = requestPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        fileName = requestPath.substr(lastSlash + 1);
+    }
+    
+    std::string fullPath = rootPath + "/" + fileName;
 
     if (access(fullPath.c_str(), F_OK) != 0) {
         safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
@@ -134,11 +162,36 @@ void Response::dealDelete() {
 void Response::dealPost() {
 	std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
-    std::string fullPath = this->_config.getLocationValue(_indexServ,  requestPath, "root") + requestPath;
-	if (fullPath.empty()) {
-		fullPath = this->_config.getConfigValue(_indexServ, "root") + requestPath;
-	}
+    std::string rootPath = "";
 
+    rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
+    
+    if (rootPath.empty()) {
+        size_t lastSlash = requestPath.find_last_of('/');
+        if (lastSlash != std::string::npos && lastSlash > 0) {
+            
+            std::string parentPath = requestPath.substr(0, lastSlash + 1);
+            rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            
+            if (rootPath.empty() && lastSlash > 0) {
+                parentPath = requestPath.substr(0, lastSlash);
+                rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            }
+        }
+    }
+    
+    if (rootPath.empty()) {
+        rootPath = this->_config.getConfigValue(_indexServ, "root");
+    }
+    
+    std::string fileName = requestPath;
+    size_t lastSlash = requestPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        fileName = requestPath.substr(lastSlash + 1);
+    }
+
+    std::string fullPath = rootPath + "/" + fileName;
+    
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
@@ -146,14 +199,10 @@ void Response::dealPost() {
         return;
     }
 
-
-    size_t lastSlashPos = fullPath.find_last_of('/');
-    if (lastSlashPos != std::string::npos) {
-        std::string dirPath = fullPath.substr(0, lastSlashPos);
-        std::string mkdirCmd = "mkdir -p " + dirPath;
-        system(mkdirCmd.c_str());
-    }
-
+    std::string dirPath = rootPath;
+    std::string mkdirCmd = "mkdir -p \"" + dirPath + "\"";
+    system(mkdirCmd.c_str());
+    
     std::ofstream out(fullPath.c_str(), std::ios::trunc);
     if (out.is_open()) {
         if (this->_requestHeaders.find("Content-Type") != this->_requestHeaders.end() &&
