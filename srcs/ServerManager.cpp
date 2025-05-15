@@ -162,10 +162,20 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
     else {
         ClientRequest request;
         if (request.parse(fullRequest, &ddosProtector)) {          
+            
+            std::map<std::string, std::string> headers = request.getHeaders();
+            if (headers.find("Host") != headers.end()) {
+                std::string hostname = extractHostname(headers["Host"]);
+                int serverIndex = findServerByHostAndPort(hostname, std::stoi(getConfigValue(_port, "listen")));
+                if (serverIndex != -1) {
+                    _port = serverIndex;
+                }
+            }
+            std::cout << "Selected server: " << _port << " for host: " << headers["Host"] << std::endl;
             Response response(client_fd, request, _config, this->_port);
             response.oriente();
         }
-        else { // to check with Sami if we can implement this handling in response.oriente();
+        else {
             std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
             std::string errorResponse = "HTTP/1.1 400 Bad Request\r\n";
             errorResponse += "Content-Type: text/html\r\n";
@@ -222,4 +232,37 @@ std::vector<std::string> ServerManager::getLocationName(int index) {
 // Récupère le nombre de locations pour un serveur donné
 int ServerManager::getLocationCount(int serverIndex) {
 	return _config.getLocationCount(serverIndex);
+}
+
+// Extract hostname from the Host header
+std::string ServerManager::extractHostname(const std::string& hostHeader) {
+    // Remove port if present (example.com:2222 -> example.com)
+    size_t colonPos = hostHeader.find(':');
+    if (colonPos != std::string::npos) {
+        return hostHeader.substr(0, colonPos);
+    }
+    return hostHeader;
+}
+
+int ServerManager::findServerByHostAndPort(const std::string& hostname, int port) {
+    int defaultServerIndex = -1;
+    
+    for (int i = 0; i < getServersCount(); ++i) {
+        std::string listenValue = getConfigValue(i, "listen");
+        std::string serverName = getConfigValue(i, "server_name");
+        
+        if (!listenValue.empty()) {
+            int configuredPort = std::stoi(listenValue);
+            if (configuredPort == port) {
+                if (serverName == hostname) {
+                    return i;
+                }
+                
+                if (defaultServerIndex == -1) {
+                    defaultServerIndex = i;
+                }
+            }
+        }
+    }
+    return defaultServerIndex;
 }

@@ -14,7 +14,7 @@ class Response{
 	private :
 		int _client_fd;
 		Config	&_config;
-		std::pair<std::string, void (Response::*)()> _func[3];
+		std::pair<std::string, void (Response::*)()> _func[4];
 		ClientRequest &_request;
 		int _indexServ;
 		bool isCGI(std::string path);

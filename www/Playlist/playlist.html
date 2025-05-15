@@ -433,24 +433,63 @@
                     
                     localStorage.setItem(playlistId, JSON.stringify(playlistData));
                     
-                    fetch('/Playlist/playlist.txt', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(playlistData)
-                    })
-                    .then(response => {
-                        if (response.ok) {
-                            showStatus('Playlist saved to server successfully! 💾', 'success');
-                        } else {
-                            throw new Error('Server error: ' + response.status);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error saving playlist to server:', error);
-                        showStatus('Error saving to server! Local copy saved.', 'warning');
-                    });
+                    showStatus('Saving playlist... ', 'info');
+                    
+                     const attemptSave = (retryCount = 0, maxRetries = 3) => {
+                        // For larger playlists, add a slight delay before sending to ensure server is ready
+                        const delay = playlistData.songs.length >= 4 ? 100 : 0;
+                        
+                        setTimeout(() => {
+                            fetch('playlist.txt', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(playlistData),
+                                // Increase timeout for larger playlists
+                                signal: AbortSignal.timeout(10000) // 10 second timeout
+                            })
+                            .then(response => {
+                                if (response.ok) {
+                                    showStatus('Playlist saved to server successfully! 💾', 'success');
+                                } else {
+                                    throw new Error('Server error: ' + response.status);
+                                }
+                            })
+                            .catch(error => {
+                                console.error(`Error saving playlist to server (attempt ${retryCount + 1}):`, error);
+                                
+                                // Check if the file exists despite the error (the server might have saved it)
+                                fetch('playlist.txt', { method: 'HEAD' })
+                                    .then(response => {
+                                        if (response.ok) {
+                                            // File exists, so the save probably worked despite the error
+                                            showStatus('Playlist saved successfully! 💾', 'success');
+                                        } else if (retryCount < maxRetries) {
+                                            // Wait with exponential backoff before retry (300ms, 900ms, 2700ms)
+                                            setTimeout(() => {
+                                                attemptSave(retryCount + 1, maxRetries);
+                                            }, 300 * Math.pow(3, retryCount));
+                                        } else {
+                                            showStatus('Error saving to server! Local copy saved.', 'warning');
+                                        }
+                                    })
+                                    .catch(() => {
+                                        // Can't check file existence, follow normal retry path
+                                        if (retryCount < maxRetries) {
+                                            setTimeout(() => {
+                                                attemptSave(retryCount + 1, maxRetries);
+                                            }, 300 * Math.pow(3, retryCount));
+                                        } else {
+                                            showStatus('Error saving to server! Local copy saved.', 'warning');
+                                        }
+                                    });
+                            });
+                        }, delay);
+                    };
+                    
+                    // Start the save attempt process
+                    attemptSave();
                 } catch (err) {
                     console.error('Error saving playlist:', err);
                     showStatus('Error saving playlist! Please try again. 😞', 'error');

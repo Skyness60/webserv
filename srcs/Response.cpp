@@ -192,7 +192,7 @@ void Response::dealDelete() {
 }
 
 void Response::dealPost() {
-	std::cout << "POST request received" << std::endl;
+    std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
     std::string rootPath = "";
 
@@ -227,7 +227,7 @@ void Response::dealPost() {
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
-		close(_client_fd);
+        close(_client_fd);
         return;
     }
 
@@ -261,31 +261,48 @@ void Response::safeSend(int statusCode, const std::string &statusMessage, const 
     response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
     response << "Content-Type: " << contentType << "\r\n";
+    response << "Connection: keep-alive\r\n"; 
+    
+    if (statusCode == 405) {
+        response << "Allow: GET, POST, DELETE\r\n";
+    }
     response << "\r\n";
     response << body;
 
     std::string responseStr = response.str();
-	ssize_t total = responseStr.size();
-	ssize_t sent = 0;
-	const char *dest = responseStr.c_str();
-	while (sent < total) {
-		ssize_t bytes = send(_client_fd, dest + sent, total - sent, MSG_NOSIGNAL);
-		if (bytes == -1) {
-			close(_client_fd);
-			return;
-		}
-		sent += bytes;
-	}
-	close(_client_fd);
+    std::cout << "Sending response: \n" << responseStr.substr(0, 200) << "..." << std::endl;
+    
+    send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
 void Response::oriente() {
+    bool isMethodSupported = (this->_request.getMethod() == "GET" || 
+                              this->_request.getMethod() == "POST" || 
+                              this->_request.getMethod() == "DELETE");
+    
+    if (!isMethodSupported) {
+        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.", "text/plain");
+        return;
+    }
+    
+    std::string requestPath = this->_request.getPath();
+    std::string allowedMethods = this->_config.getLocationValue(_indexServ, requestPath, "methods");
+    
+    if (allowedMethods.empty()) {
+        allowedMethods = "GET POST DELETE";
+    }
+    
+    if (allowedMethods.find(this->_request.getMethod()) == std::string::npos) {
+        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.", "text/plain");
+        return;
+    }
+
     for (size_t i = 0; i < 3; i++) {
         if (this->_func[i].first == this->_request.getMethod()) {
             return (this->*(_func[i].second))();
         }
     }
-    safeSend(405, "Method Not Allowed", "The requested method is not supported.", "text/plain");
+    safeSend(500, "Internal Server Error", "An unexpected error occurred processing your request.", "text/plain");
 }
 
 bool Response::isCGI(std::string path) {
@@ -328,3 +345,4 @@ bool Response::isCGI(std::string path) {
 	}
 	return false;
 }
+
