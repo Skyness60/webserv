@@ -1,5 +1,6 @@
 #include "Response.hpp"
 #include <sys/stat.h>
+#include <dirent.h>
 
 Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index) 
 	: _client_fd(fd), _config(serv_conf), _request(request), _indexServ(index) {
@@ -52,8 +53,8 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-    std::string root = this->_config.getLocationValue(_indexServ,  this->_request.getPath(), "root");
-	std::cout << "root :" << root << std::endl;
+    std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
+    std::cout << "root :" << root << std::endl;
     if (root.empty()) {
         root = this->_config.getConfigValue(_indexServ, "root");
     }
@@ -63,10 +64,17 @@ void Response::dealGet() {
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getLocationValue(_indexServ,  this->_request.getPath(), "index");
-		std::cout << "indexFile :" << indexFile << std::endl;
-        if (indexFile.empty()) {
+        std::string indexFile = _config.getLocationValue(_indexServ, this->_request.getPath(), "index");
+        std::cout << "indexFile :" << indexFile << std::endl;
+        if (indexFile.empty() && this->_request.getPath() == "/") {
             indexFile = _config.getConfigValue(_indexServ, "index");
+        } else if (indexFile.empty()) {
+            std::string autoIndex = _config.getLocationValue(_indexServ, this->_request.getPath(), "autoindex");
+            if (autoIndex == "on") {
+                std::string autoIndexPage = generateAutoIndex(fullPath, this->_request.getPath());
+                safeSend(200, "OK", autoIndexPage, "text/html");
+                return;
+            }
         }
         fullPath += "/" + indexFile;
     }
@@ -74,7 +82,7 @@ void Response::dealGet() {
     if (isCGI(this->_request.getPath())) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
-		close(_client_fd);
+        close(_client_fd);
         return;
     }
 
@@ -114,6 +122,30 @@ void Response::dealGet() {
     std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     std::string contentType = getContentType(fullPath);
     safeSend(200, "OK", body, contentType);
+}
+
+std::string Response::generateAutoIndex(const std::string &directoryPath, const std::string &requestPath) {
+    DIR *dir = opendir(directoryPath.c_str());
+    if (!dir) {
+        return "<html><body><h1>500 Internal Server Error</h1><p>Failed to open directory.</p></body></html>";
+    }
+
+    std::ostringstream html;
+    html << "<html><head><title>Index of " << requestPath << "</title></head><body>";
+    html << "<h1>Index of " << requestPath << "</h1><ul>";
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        std::string name = entry->d_name;
+        if (name == ".") continue;
+        html << "<li><a href=\"" << requestPath;
+        if (requestPath.back() != '/') html << "/";
+        html << name << "\">" << name << "</a></li>";
+    }
+
+    html << "</ul></body></html>";
+    closedir(dir);
+    return html.str();
 }
 
 void Response::dealDelete() {
