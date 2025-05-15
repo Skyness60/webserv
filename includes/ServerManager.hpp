@@ -15,6 +15,8 @@ class ServerManager {
 		void handleNewConnection(int server_fd, int epoll_fd);
 		void handleClientRequest(int client_fd, int epoll_fd);
 		void cleanup(int epoll_fd, const std::vector<int> &server_fds);
+		std::string extractHostname(const std::string& hostHeader);
+		int findServerByHostAndPort(const std::string& hostname, int port);
 	public:
 		ServerManager(std::string filename);
 		ServerManager(const ServerManager &copy);

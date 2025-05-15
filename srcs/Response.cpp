@@ -7,7 +7,6 @@ Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index)
     this->_func[0] = std::make_pair("GET", &Response::dealGet);
     this->_func[1] = std::make_pair("POST", &Response::dealPost);
     this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
-    this->_func[3] = std::make_pair("HEAD", &Response::dealHead);
     this->_requestMethod = request.getMethod();
     this->_requestPath = request.getPath();
     this->_requestHeaders = request.getHeaders();
@@ -263,112 +262,34 @@ void Response::safeSend(int statusCode, const std::string &statusMessage, const 
     response << "Content-Length: " << body.size() << "\r\n";
     response << "Content-Type: " << contentType << "\r\n";
     response << "Connection: keep-alive\r\n"; 
+    
+    if (statusCode == 405) {
+        response << "Allow: GET, POST, DELETE\r\n";
+    }
     response << "\r\n";
     response << body;
 
     std::string responseStr = response.str();
     std::cout << "Sending response: \n" << responseStr.substr(0, 200) << "..." << std::endl;
-
-    // Don't close the connection immediately for the ubuntu_tester
-    if (this->_request.getMethod() != "HEAD" && this->_request.getMethod() != "POST" && this->_request.getPath() == "/") {
-        close(_client_fd);
-    }
-}
-
-void Response::headSend(int statusCode, const std::string &statusMessage, const std::string &contentType, size_t contentLength) {
-    std::ostringstream response;
-    response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
-    response << "Content-Length: " << contentLength << "\r\n";
-    response << "Content-Type: " << contentType << "\r\n";
-    response << "Connection: keep-alive\r\n"; 
-    response << "\r\n";
-
-    std::string responseStr = response.str();
-    std::cout << "HEAD Response: \n" << responseStr << std::endl;
     
-}
-
-void Response::dealHead() {
-
-    std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
-    if (root.empty()) {
-        root = this->_config.getConfigValue(_indexServ, "root");
-    }
-
-    std::string fullPath = root + this->_request.getPath();
-    std::cout << "HEAD fullPath: " << fullPath << std::endl;
-
-    struct stat pathStat;
-    if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getLocationValue(_indexServ, this->_request.getPath(), "index");
-        if (indexFile.empty()) {
-            indexFile = _config.getConfigValue(_indexServ, "index");
-        }
-        fullPath += "/" + indexFile;
-    }
-
-    std::ifstream file(fullPath.c_str(), std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        headSend(404, "Not Found", "text/plain", 0);
-        return;
-    }
-    
-    std::streampos fileSize = file.tellg();
-    file.close();
-    
-    std::string contentType = getContentType(fullPath);
-    headSend(200, "OK", contentType, static_cast<size_t>(fileSize));
+    send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
 void Response::oriente() {
-    // Special test handling for HEAD to root path
-    if (this->_request.getMethod() == "HEAD" && this->_request.getPath() == "/") {
-        std::cout << "Special HEAD handling for path: " << this->_request.getPath() << std::endl;
-        
-        // For HEAD requests to root, always return 405 Method Not Allowed
-        // This is because our configuration says root only allows GET
-        std::ostringstream response;
-        response << "HTTP/1.1 405 Method Not Allowed\r\n";
-        response << "Content-Length: 0\r\n";
-        response << "Content-Type: text/plain\r\n";
-        response << "Connection: keep-alive\r\n";
-        response << "Allow: GET\r\n";
-        response << "\r\n";
-
-        std::string responseStr = response.str();
-        std::cout << "Sending HEAD response: \n" << responseStr << std::endl;
-        
-        send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
+    bool isMethodSupported = (this->_request.getMethod() == "GET" || 
+                              this->_request.getMethod() == "POST" || 
+                              this->_request.getMethod() == "DELETE");
+    
+    if (!isMethodSupported) {
+        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.", "text/plain");
         return;
     }
     
-    // Special handling for POST to root path
-    if (this->_request.getMethod() == "POST" && this->_request.getPath() == "/") {
-        std::cout << "Special POST handling for path: " << this->_request.getPath() << std::endl;
-        
-        // For POST requests to root, always return 405 Method Not Allowed
-        // This is because our configuration says root only allows GET
-        std::ostringstream response;
-        response << "HTTP/1.1 405 Method Not Allowed\r\n";
-        response << "Content-Length: 56\r\n";
-        response << "Content-Type: text/plain\r\n";
-        response << "Connection: keep-alive\r\n";
-        response << "Allow: GET\r\n"; 
-        response << "\r\n";
-        response << "The requested method is not supported for this location.";
-
-        std::string responseStr = response.str();
-        std::cout << "Sending POST response: \n" << responseStr << std::endl;
-        
-        send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
-        return;
-    }
-
     std::string requestPath = this->_request.getPath();
     std::string allowedMethods = this->_config.getLocationValue(_indexServ, requestPath, "methods");
     
     if (allowedMethods.empty()) {
-        allowedMethods = "GET POST DELETE HEAD";
+        allowedMethods = "GET POST DELETE";
     }
     
     if (allowedMethods.find(this->_request.getMethod()) == std::string::npos) {
@@ -376,13 +297,12 @@ void Response::oriente() {
         return;
     }
 
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 3; i++) {
         if (this->_func[i].first == this->_request.getMethod()) {
             return (this->*(_func[i].second))();
         }
     }
-    
-    safeSend(405, "Method Not Allowed", "The requested method is not supported.", "text/plain");
+    safeSend(500, "Internal Server Error", "An unexpected error occurred processing your request.", "text/plain");
 }
 
 bool Response::isCGI(std::string path) {
