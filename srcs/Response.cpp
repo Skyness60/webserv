@@ -1,5 +1,6 @@
 #include "Response.hpp"
 #include <sys/stat.h>
+#include <dirent.h>
 
 Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index) 
 	: _client_fd(fd), _config(serv_conf), _request(request), _indexServ(index) {
@@ -53,8 +54,7 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
-
-    std::string root = this->_config.getLocationValue(_indexServ,  this->_request.getPath(), "root");
+    std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
     std::cout << "root :" << root << std::endl;
     if (root.empty()) {
         root = this->_config.getConfigValue(_indexServ, "root");
@@ -65,10 +65,17 @@ void Response::dealGet() {
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        std::string indexFile = _config.getLocationValue(_indexServ,  this->_request.getPath(), "index");
+        std::string indexFile = _config.getLocationValue(_indexServ, this->_request.getPath(), "index");
         std::cout << "indexFile :" << indexFile << std::endl;
-        if (indexFile.empty()) {
+        if (indexFile.empty() && this->_request.getPath() == "/") {
             indexFile = _config.getConfigValue(_indexServ, "index");
+        } else if (indexFile.empty()) {
+            std::string autoIndex = _config.getLocationValue(_indexServ, this->_request.getPath(), "autoindex");
+            if (autoIndex == "on") {
+                std::string autoIndexPage = generateAutoIndex(fullPath, this->_request.getPath());
+                safeSend(200, "OK", autoIndexPage, "text/html");
+                return;
+            }
         }
         fullPath += "/" + indexFile;
     }
@@ -76,7 +83,7 @@ void Response::dealGet() {
     if (isCGI(this->_request.getPath())) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
-		close(_client_fd);
+        close(_client_fd);
         return;
     }
 
@@ -118,8 +125,60 @@ void Response::dealGet() {
     safeSend(200, "OK", body, contentType);
 }
 
+std::string Response::generateAutoIndex(const std::string &directoryPath, const std::string &requestPath) {
+    DIR *dir = opendir(directoryPath.c_str());
+    if (!dir) {
+        return "<html><body><h1>500 Internal Server Error</h1><p>Failed to open directory.</p></body></html>";
+    }
+
+    std::ostringstream html;
+    html << "<html><head><title>Index of " << requestPath << "</title></head><body>";
+    html << "<h1>Index of " << requestPath << "</h1><ul>";
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        std::string name = entry->d_name;
+        if (name == ".") continue;
+        html << "<li><a href=\"" << requestPath;
+        if (requestPath.back() != '/') html << "/";
+        html << name << "\">" << name << "</a></li>";
+    }
+
+    html << "</ul></body></html>";
+    closedir(dir);
+    return html.str();
+}
+
 void Response::dealDelete() {
-    std::string fullPath = "./www" + this->_request.getPath();
+    std::string requestPath = this->_requestPath;
+    
+    std::string rootPath = "";
+    rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
+    
+    if (rootPath.empty()) {
+        size_t lastSlash = requestPath.find_last_of('/');
+        if (lastSlash != std::string::npos && lastSlash > 0) {
+            std::string parentPath = requestPath.substr(0, lastSlash + 1);
+            rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            
+            if (rootPath.empty() && lastSlash > 0) {
+                parentPath = requestPath.substr(0, lastSlash);
+                rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            }
+        }
+    }
+    
+    if (rootPath.empty()) {
+        rootPath = this->_config.getConfigValue(_indexServ, "root");
+    }
+    
+    std::string fileName = requestPath;
+    size_t lastSlash = requestPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        fileName = requestPath.substr(lastSlash + 1);
+    }
+    
+    std::string fullPath = rootPath + "/" + fileName;
 
     if (access(fullPath.c_str(), F_OK) != 0) {
         safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
@@ -136,24 +195,47 @@ void Response::dealDelete() {
 void Response::dealPost() {
     std::cout << "POST request received" << std::endl;
     std::string requestPath = this->_requestPath;
-    std::string fullPath = this->_config.getLocationValue(_indexServ,  requestPath, "root") + requestPath;
-	if (fullPath.empty()) {
-		fullPath = this->_config.getConfigValue(_indexServ, "root") + requestPath;
-	}    
+    std::string rootPath = "";
+
+    rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
+    
+    if (rootPath.empty()) {
+        size_t lastSlash = requestPath.find_last_of('/');
+        if (lastSlash != std::string::npos && lastSlash > 0) {
+            
+            std::string parentPath = requestPath.substr(0, lastSlash + 1);
+            rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            
+            if (rootPath.empty() && lastSlash > 0) {
+                parentPath = requestPath.substr(0, lastSlash);
+                rootPath = this->_config.getLocationValue(_indexServ, parentPath, "root");
+            }
+        }
+    }
+    
+    if (rootPath.empty()) {
+        rootPath = this->_config.getConfigValue(_indexServ, "root");
+    }
+    
+    std::string fileName = requestPath;
+    size_t lastSlash = requestPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        fileName = requestPath.substr(lastSlash + 1);
+    }
+
+    std::string fullPath = rootPath + "/" + fileName;
+    
     if (isCGI(requestPath)) {
         CGIManager cgi(_config, _indexServ, this->_request);
         cgi.executeCGI(_client_fd, this->_request.getMethod());
         close(_client_fd);
         return;
     }
-    
-    size_t lastSlashPos = fullPath.find_last_of('/');
-    if (lastSlashPos != std::string::npos) {
-        std::string dirPath = fullPath.substr(0, lastSlashPos);
-        std::string mkdirCmd = "mkdir -p " + dirPath;
-        system(mkdirCmd.c_str());
-    }
 
+    std::string dirPath = rootPath;
+    std::string mkdirCmd = "mkdir -p \"" + dirPath + "\"";
+    system(mkdirCmd.c_str());
+    
     std::ofstream out(fullPath.c_str(), std::ios::trunc);
     if (out.is_open()) {
         if (this->_requestHeaders.find("Content-Type") != this->_requestHeaders.end() &&

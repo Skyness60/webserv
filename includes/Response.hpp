@@ -24,8 +24,7 @@ class Response{
 		std::string _requestPath;
 		std::map<std::string, std::string> _requestHeaders;
 		std::string _requestBody;
-        std::string getFullPath(const std::string& requestPath);
-        bool ensureDirectoryExists(const std::string& fullPath);
+		std::string generateAutoIndex(const std::string &directoryPath, const std::string &requestPath);
 
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
