@@ -53,6 +53,7 @@ static std::string getContentType(const std::string &path) {
 }
 
 void Response::dealGet() {
+	std::string alias = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "alias");
     std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
     std::cout << "root :" << root << std::endl;
     if (root.empty()) {
@@ -60,6 +61,9 @@ void Response::dealGet() {
     }
 
     std::string fullPath = root + this->_request.getPath();
+	if (!alias.empty()) {
+		fullPath = alias;
+	}
     std::cout << "fullPath: " << fullPath << std::endl;
 
     struct stat pathStat;
