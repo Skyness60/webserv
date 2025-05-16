@@ -68,4 +68,8 @@ Send a delete Request
 
      curl -X DELETE http://localhost:2222/www/cat.jpg -v
 
- 
+_______________
+
+Running basic load test with 25 concurrent users for 30 seconds
+
+siege -c25 -t30S http://localhost:2222/index.html
