@@ -18,12 +18,12 @@ class Response{
 		ClientRequest &_request;
 		int _indexServ;
 		bool isCGI(std::string path);
-		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html");
 		std::string _requestMethod;
 		std::string _requestPath;
 		std::map<std::string, std::string> _requestHeaders;
 		std::string _requestBody;
 		std::string generateAutoIndex(const std::string &directoryPath, const std::string &requestPath);
+		void handleNotFound();
 
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
@@ -34,4 +34,9 @@ class Response{
 		void dealPost();
 		void dealDelete();
 		void oriente();
+		void handlePayloadTooLarge(size_t maxSize);
+		void handleUriTooLong(size_t maxLength);
+		void handleHttpVersionNotSupported(const std::string &version);
+		void handleRedirect(const std::string &redirectUrl);
+		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html", bool closeConnection = false);
 };

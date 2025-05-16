@@ -92,35 +92,8 @@ void Response::dealGet() {
 
     std::ifstream file(fullPath.c_str(), std::ios::binary);
     if (!file.is_open()) {
-        std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
-        if (!errorPage.empty()) {
-            size_t spacePos = errorPage.find(' ');
-            if (spacePos != std::string::npos) {
-                std::string errorCode = errorPage.substr(0, spacePos);
-                std::string errorFile = errorPage.substr(spacePos + 1);
-                if (errorCode == "404") {
-                    fullPath = "./www/" + errorFile;
-                    if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-                        safeSend(500, "Internal Server Error", "Error page path is a directory.", "text/plain");
-                        return;
-                    }
-                    file.open(fullPath.c_str(), std::ios::binary);
-                    if (!file.is_open()) {
-                        safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-                        return;
-                    }
-                } else {
-                    safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-                    return;
-                }
-            } else {
-                safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-                return;
-            }
-        } else {
-            safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
-            return;
-        }
+        handleNotFound();
+        return;
     }
 
     std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -184,12 +157,12 @@ void Response::dealDelete() {
     std::string fullPath = rootPath + "/" + fileName;
 
     if (access(fullPath.c_str(), F_OK) != 0) {
-        safeSend(404, "Not Found", "The requested file does not exist.", "text/plain");
+        safeSend(404, "Not Found", "The requested file does not exist.\n", "text/plain");
         return;
     }
 
     if (remove(fullPath.c_str()) == 0) {
-        safeSend(200, "OK", "File deleted successfully.", "text/plain");
+        safeSend(200, "OK", "File deleted successfully.\n", "text/plain");
     } else {
         safeSend(500, "Internal Server Error", "Failed to delete the file.", "text/plain");
     }
@@ -225,6 +198,10 @@ void Response::dealPost() {
     if (lastSlash != std::string::npos) {
         fileName = requestPath.substr(lastSlash + 1);
     }
+    
+    if (fileName.empty()) {
+        fileName = "index.html";
+    }
 
     std::string fullPath = rootPath + "/" + fileName;
     
@@ -253,19 +230,24 @@ void Response::dealPost() {
             out.flush();
         }
         out.close();
-        safeSend(201, "Created", "File created successfully.", "text/plain");
+        safeSend(201, "Created", "File created successfully.\n", "text/plain");
     } else {
         std::string errorMsg = "Failed to open file for writing: " + fullPath;
         safeSend(500, "Internal Server Error", errorMsg, "text/plain");
     }
 }
 
-void Response::safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType) {
+void Response::safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType, bool closeConnection) {
     std::ostringstream response;
     response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
     response << "Content-Type: " << contentType << "\r\n";
-    response << "Connection: keep-alive\r\n"; 
+    
+    if (closeConnection || statusCode == 413) {
+        response << "Connection: close\r\n";
+    } else {
+        response << "Connection: keep-alive\r\n";
+    }
     
     if (statusCode == 405) {
         response << "Allow: GET, POST, DELETE\r\n";
@@ -274,22 +256,54 @@ void Response::safeSend(int statusCode, const std::string &statusMessage, const 
     response << body;
 
     std::string responseStr = response.str();
-    std::cout << "Sending response: \n" << responseStr.substr(0, 200) << "..." << std::endl;
+    std::cout << "Sending response: \n" << responseStr.substr(0, std::min((size_t)200, responseStr.size())) << (responseStr.size() > 200 ? "..." : "") << std::endl;
     
     send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
+void Response::handlePayloadTooLarge(size_t maxSize) {
+    std::ostringstream message;
+    message << "The request body exceeds the maximum allowed size of " 
+            << (maxSize / 1024 / 1024) << " MB.";
+    
+    safeSend(413, "Payload Too Large", message.str(), "text/plain", true);
+}
+
+void Response::handleUriTooLong(size_t maxLength) {
+    std::ostringstream message;
+    message << "The requested URI exceeds the maximum allowed length of " 
+            << maxLength << " characters.";
+    
+    safeSend(414, "URI Too Long", message.str(), "text/plain", true);
+}
+
 void Response::oriente() {
+    std::string requestPath = this->_request.getPath();
+    std::string redirectDirective = this->_config.getLocationValue(_indexServ, requestPath, "return");
+    
+    if (!redirectDirective.empty()) {
+        size_t spacePos = redirectDirective.find(' ');
+        if (spacePos != std::string::npos) {
+            std::string statusCodeStr = redirectDirective.substr(0, spacePos);
+            std::string redirectUrl = redirectDirective.substr(spacePos + 1);
+            
+            int statusCode = std::atoi(statusCodeStr.c_str());
+            if (statusCode == 301) {
+                handleRedirect(redirectUrl);
+                return;
+            }
+        }
+    }
+    
     bool isMethodSupported = (this->_request.getMethod() == "GET" || 
                               this->_request.getMethod() == "POST" || 
                               this->_request.getMethod() == "DELETE");
     
     if (!isMethodSupported) {
-        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.", "text/plain");
+        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.\n", "text/plain");
         return;
     }
     
-    std::string requestPath = this->_request.getPath();
     std::string allowedMethods = this->_config.getLocationValue(_indexServ, requestPath, "methods");
     
     if (allowedMethods.empty()) {
@@ -297,7 +311,7 @@ void Response::oriente() {
     }
     
     if (allowedMethods.find(this->_request.getMethod()) == std::string::npos) {
-        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.", "text/plain");
+        safeSend(405, "Method Not Allowed", "The requested method is not supported for this location.\n", "text/plain");
         return;
     }
 
@@ -306,7 +320,7 @@ void Response::oriente() {
             return (this->*(_func[i].second))();
         }
     }
-    safeSend(500, "Internal Server Error", "An unexpected error occurred processing your request.", "text/plain");
+    safeSend(500, "Internal Server Error", "An unexpected error occurred processing your request.\n", "text/plain");
 }
 
 bool Response::isCGI(std::string path) {
@@ -348,5 +362,60 @@ bool Response::isCGI(std::string path) {
 		}
 	}
 	return false;
+}
+
+void Response::handleNotFound() {
+    std::string errorPage = _config.getConfigValue(_indexServ, "error_page");
+    if (!errorPage.empty()) {
+        size_t spacePos = errorPage.find(' ');
+        if (spacePos != std::string::npos) {
+            std::string errorCode = errorPage.substr(0, spacePos);
+            std::string errorFile = errorPage.substr(spacePos + 1);
+            
+            if (errorCode == "404") {
+                std::string fullPath = "./www/" + errorFile;
+                
+                struct stat pathStat;
+                if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+                    safeSend(500, "Internal Server Error", "Error page path is a directory.\n", "text/plain");
+                    return;
+                }
+                
+                std::ifstream file(fullPath.c_str(), std::ios::binary);
+                if (file.is_open()) {
+                    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                    std::string contentType = getContentType(fullPath);
+                    safeSend(404, "Not Found", body, contentType);
+                    return;
+                }
+            }
+        }
+    }
+    
+    safeSend(404, "Not Found", "The requested file does not exist.\n", "text/plain");
+}
+
+void Response::handleHttpVersionNotSupported(const std::string &version) {
+    std::ostringstream message;
+    message << "HTTP Version \"" << version << "\" is not supported. This server only supports "
+            << HTTP_SUPPORTED_VERSION << ".";
+    
+    safeSend(505, "HTTP Version Not Supported", message.str(), "text/plain", true);
+}
+
+void Response::handleRedirect(const std::string &redirectUrl) {
+    std::ostringstream body;
+    std::ostringstream response;
+    response << "HTTP/1.1 301 Moved Permanently\r\n";
+    response << "Location: " << redirectUrl << "\r\n";
+    response << "Content-Length: " << body.str().size() << "\r\n";
+    response << "Content-Type: text/html\r\n";
+    response << "\r\n";
+    response << body.str();
+
+    std::string responseStr = response.str();
+    std::cout << "Sending redirect response to: " << redirectUrl << std::endl;
+    
+    send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
