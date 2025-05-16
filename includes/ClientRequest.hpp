@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:42:32 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/16 16:34:51 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/05/16 18:45:30 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,8 @@ class DdosProtection;
 #define REQUEST_DEFAULT_HEADER_TIMEOUT 10  // 10 seconds for headers
 #define REQUEST_DEFAULT_BODY_TIMEOUT 30    // 30 seconds for body
 #define REQUEST_MAX_BODY_SIZE 5242880     // 5MB body size limit
+#define REQUEST_MAX_URI_LENGTH 2000       // 2000 characters max URI length
+#define HTTP_SUPPORTED_VERSION "HTTP/1.1" // Only HTTP/1.1 is supported
 
 class ClientRequest {
     
@@ -34,6 +36,7 @@ class ClientRequest {
         std::string         _resourcePath;
         time_t              _timeout;
         size_t              _maxBodySize;
+        size_t              _maxUriLength;
         bool                _timedOut;                 
 
     public:
@@ -71,15 +74,17 @@ class ClientRequest {
         void                setMaxBodySize(size_t size);
         bool                isBodySizeValid() const;
         bool                hasTimedOut() const;
+        bool                isUriTooLong() const;
+        bool                isHttpVersionSupported() const;
 
     // Getters
         std::string         getMethod()         const;
         std::string         getPath()           const;
-		std::map<std::string, std::string> getFormData() const;
+        std::map<std::string, std::string> getFormData() const;
         std::string         getResourcePath()   const;
         std::string         getHttpVersion()    const;
         std::string         getBody()           const;
-		std::string         getContentType()    const;
+        std::string         getContentType()    const;
         std::map<std::string, std::string> getHeaders() const;
         std::map<std::string, std::string> getQueryParams() const;
         

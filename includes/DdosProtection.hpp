@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/22 11:57:36 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/16 16:35:01 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/05/16 17:18:56 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -53,7 +53,6 @@ class DdosProtection {
         bool            isBodySizeValid(const std::map<std::string, std::string>& headers, size_t maxBodySize);
         void            blockIP(const std::string& clientIp, int durationSeconds);
         void            unblockIP(const std::string& clientIp);
-        std::string     getStats();
         void            configure(int rateWindow, int maxRequests, int blockDuration);
         void            initTimeout(time_t seconds = REQUEST_DEFAULT_HEADER_TIMEOUT);
         void            updateTimeout(time_t seconds = REQUEST_DEFAULT_BODY_TIMEOUT);
@@ -61,5 +60,4 @@ class DdosProtection {
         void            setMaxBodySize(size_t size);
         bool            isBodySizeValid() const;
         bool            hasTimedOut() const;
-        void            testDdosProtection();
 };

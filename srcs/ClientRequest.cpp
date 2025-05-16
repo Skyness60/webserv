@@ -6,7 +6,7 @@
 /*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/15 16:40:06 by okapshai         ###   ########.fr       */
+/*   Updated: 2025/05/16 18:45:33 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@ ClientRequest::ClientRequest() :
     _resourcePath(""),
     _timeout(0),
     _maxBodySize(REQUEST_MAX_BODY_SIZE),
+    _maxUriLength(REQUEST_MAX_URI_LENGTH),
     _timedOut(false)
 {}
 
@@ -40,6 +41,7 @@ ClientRequest & ClientRequest::operator=( ClientRequest const & other ){
         this->_headers = other._headers;
         this->_timeout = other._timeout;
         this->_maxBodySize = other._maxBodySize;
+        this->_maxUriLength = other._maxUriLength;
         this->_timedOut = other._timedOut;
     }
     return (*this);
@@ -582,4 +584,12 @@ bool ClientRequest::isBodySizeValid() const {
         return contentLength <= _maxBodySize;
     }
     return true;
+}
+
+bool ClientRequest::isUriTooLong() const {
+    return _path.length() > _maxUriLength;
+}
+
+bool ClientRequest::isHttpVersionSupported() const {
+    return _httpVersion == HTTP_SUPPORTED_VERSION;
 }

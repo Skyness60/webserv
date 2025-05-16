@@ -1,0 +1,71 @@
+Multiple connexions test :
+ ./webserv config/multiple_hostnames.conf
+
+curl -v --resolve example.org:2222:127.0.0.1 http://example.org:2222/
+curl -v --resolve example.com:2222:127.0.0.1 http://example.com:2222/
+
+_______________
+
+404: message = "Not Found"
+
+     curl http://localhost:2222/blablabla -v
+     curl -v http://localhost:2222/this_file_does_not_exist
+     curl -X DELETE http://localhost:2222/uploads/thisfiledoesnotexist.txt -v
+
+_______________
+
+413: message = "Payload Too Large"
+
+     Test with a body larger than 5MB limit (should be rejected)
+          curl -X POST -H "Content-Type: text/plain" --data-binary @<(head -c 10M /dev/urandom) http://localhost:2222/ -v
+
+     Test with a body smaller than 5MB limit (should be accepted - 201 )
+          curl -X POST -H "Content-Type: text/plain" --data "This is a small body under 100 bytes" http://localhost:2222/ -v
+_______________
+
+400: message = "Bad Request" **
+     
+     send a double header request:
+          curl -v -H "Content-Length: 100" -H "Content-Length: 200" http://localhost:2222
+
+_______________
+
+
+405: message = "Method Not Allowed"
+
+     send a HEAD request:
+                         curl -I http://localhost:2222/
+     send a HEAD request:
+                         curl -X PATCH http://localhost:2222/ -v 
+
+_______________
+
+414: message = "URI Too Long"
+
+     curl -v "http://localhost:2222/$(head -c 5000 < /dev/zero | tr '\0' 'A')"
+
+_______________
+
+
+505: message = "HTTP Version Not Supported"
+
+     printf "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n" | nc localhost 2222
+
+_______________
+
+301: message = "Moved Permanently"
+     set in the configuration file :
+     
+     location /redirect {
+		return 301 https://www.youtube.com/;
+	}
+     
+     curl http://localhost:2222/redirect -v
+
+_______________
+
+Send a delete Request
+
+     curl -X DELETE http://localhost:2222/www/cat.jpg -v
+
+ 
