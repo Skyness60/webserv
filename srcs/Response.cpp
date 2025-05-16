@@ -225,6 +225,10 @@ void Response::dealPost() {
     if (lastSlash != std::string::npos) {
         fileName = requestPath.substr(lastSlash + 1);
     }
+    
+    if (fileName.empty()) {
+        fileName = "index.html";
+    }
 
     std::string fullPath = rootPath + "/" + fileName;
     

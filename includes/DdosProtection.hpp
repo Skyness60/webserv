@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   DdosProtection.hpp                                 :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: olly <olly@student.42.fr>                  +#+  +:+       +#+        */
+/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/22 11:57:36 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/13 14:28:19 by olly             ###   ########.fr       */
+/*   Updated: 2025/05/16 16:35:01 by okapshai         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,7 @@
 
 #define REQUEST_DEFAULT_HEADER_TIMEOUT 10  // 10 seconds for headers
 #define REQUEST_DEFAULT_BODY_TIMEOUT 30    // 30 seconds for body
-#define REQUEST_MAX_BODY_SIZE 104857600    // 100MB default max body size for ubuntu_tester compatibility
+#define REQUEST_MAX_BODY_SIZE 5242880     // 5MB body size limit
 #define DDOS_DEFAULT_RATE_WINDOW 60        // 60 seconds time window
 #define DDOS_DEFAULT_MAX_REQUESTS 100      // 100 max requests in the window
 #define DDOS_DEFAULT_BLOCK_DURATION 300    // 300 seconds (5 minutes) block duration
