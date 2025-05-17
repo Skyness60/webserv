@@ -6,5 +6,5 @@
 class EpollManager {
 public:
     int setupEpollInstance(const std::vector<int> &server_fds);
-    void eventLoop(int epoll_fd, const std::vector<int> &server_fds, std::function<void(int)> handleNewConnection, std::function<void(int)> handleClientRequest);
+    void eventLoop(int epoll_fd, const std::vector<int> &server_fds, std::function<void(int)> handleNewConnection, std::function<void(int)> handleClientRequest, std::function<void(int)> handleWriteReady);
 };

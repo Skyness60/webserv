@@ -11,7 +11,7 @@ int EpollManager::setupEpollInstance(const std::vector<int> &server_fds) {
 
     for (int server_fd : server_fds) {
         struct epoll_event event;
-        event.events = EPOLLIN;
+        event.events = EPOLLIN | EPOLLOUT;
         event.data.fd = server_fd;
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1) {
             perror("epoll_ctl");
@@ -22,7 +22,7 @@ int EpollManager::setupEpollInstance(const std::vector<int> &server_fds) {
     return epoll_fd;
 }
 
-void EpollManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds, std::function<void(int)> handleNewConnection, std::function<void(int)> handleClientRequest) {
+void EpollManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds, std::function<void(int)> handleNewConnection, std::function<void(int)> handleClientRequest, std::function<void(int)> handleWriteReady) {
     const int MAX_EVENTS = 10;
     struct epoll_event events[MAX_EVENTS];
 
@@ -36,10 +36,15 @@ void EpollManager::eventLoop(int epoll_fd, const std::vector<int> &server_fds, s
 
         for (int i = 0; i < num_events; ++i) {
             int event_fd = events[i].data.fd;
-            if (std::find(server_fds.begin(), server_fds.end(), event_fd) != server_fds.end()) {
-                handleNewConnection(event_fd);
-            } else {
-                handleClientRequest(event_fd);
+            if (events[i].events & EPOLLIN) {
+                if (std::find(server_fds.begin(), server_fds.end(), event_fd) != server_fds.end()) {
+                    handleNewConnection(event_fd);
+                } else {
+                    handleClientRequest(event_fd);
+                }
+            }
+            if (events[i].events & EPOLLOUT) {
+                handleWriteReady(event_fd);
             }
         }
     }

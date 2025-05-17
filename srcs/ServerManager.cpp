@@ -54,7 +54,8 @@ void ServerManager::startServer() {
 
     epollManager.eventLoop(epoll_fd, server_fds,
         [this, epoll_fd](int server_fd) { handleNewConnection(server_fd, epoll_fd); },
-        [this, epoll_fd](int client_fd) { handleClientRequest(client_fd, epoll_fd); }
+        [this, epoll_fd](int client_fd) { handleClientRequest(client_fd, epoll_fd); },
+		[this](int client_fd) { handleWriteReady(client_fd); }
     );
 
     cleanup(epoll_fd, server_fds);
@@ -227,6 +228,18 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     }
 }
+
+void ServerManager::handleWriteReady(int client_fd) {
+    const char *message = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: text/plain\r\n\r\nHello, world!";
+    ssize_t bytes_sent = send(client_fd, message, strlen(message), 0);
+    if (bytes_sent == -1) {
+        perror("send");
+    } else {
+        std::cout << "Sent " << bytes_sent << " bytes to client " << client_fd << std::endl;
+    }
+    close(client_fd);
+}
+
 
 
 // Nettoie les ressources utilisées par le serveur
