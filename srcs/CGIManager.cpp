@@ -1,43 +1,38 @@
 #include "CGIManager.hpp"
 
-CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request) : _config(config), _serverIndex(serverIndex), _request(request)
+CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request)
+    : _config(config), _serverIndex(serverIndex), _request(request)
 {
-	std::string path;
-	std::string extension;
-	std::string root;
-	const std::vector<std::string> &locations = _config.getLocationName(serverIndex);
+	// initialise _root au root déclaré au niveau du server
+	_root = _config.getConfigValue(serverIndex, "root");
 
-	for (std::vector<std::string>::const_iterator it = locations.begin(); it != locations.end(); ++it)
-	{
-		path = _config.getLocationValue(serverIndex, *it, "cgi_path");
-		extension = _config.getLocationValue(serverIndex, *it, "cgi_extension");
-		root = _config.getLocationValue(serverIndex, *it, "cgi_root");
-	
-		if (!extension.empty() and !root.empty())
-		{
-			_path = path;
-			_extension = extension;
-			_root = root;
+	// déterminer l'extension demandée (sans le point)
+	std::string reqPath = _request.getPath();
+	size_t dot = reqPath.find_last_of('.');
+	std::string reqExt = (dot != std::string::npos) ? reqPath.substr(dot + 1) : "";
+
+	// parcourir toutes les locations pour trouver la correspondance cgi_extension
+	const std::vector<std::string> &locations = _config.getLocationName(serverIndex);
+	for (std::vector<std::string>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+		std::string cgiExt = _config.getLocationValue(serverIndex, *it, "cgi_extension");
+		if (cgiExt.empty()) continue;
+		if (cgiExt == reqExt || cgiExt == "." + reqExt) {
+			// on a trouvé la bonne location CGI
+			_extension = cgiExt;
+			_path      = _config.getLocationValue(serverIndex, *it, "cgi_path");
+
+			std::string cgiRoot = _config.getLocationValue(serverIndex, *it, "cgi_root");
+			if (!cgiRoot.empty())
+				_root = cgiRoot;
+			else
+				_root = _config.getConfigValue(serverIndex, "root");  // serveur-level root
+
 			_locationName = *it;
 			break;
-		}
-		else if (!extension.empty())
-		{
-			_path = path;
-			_extension = extension;
-			_root = _config.getLocationValue(serverIndex, *it, "root");
-			if (_root.empty())
-				_root = _config.getConfigValue(serverIndex, "root");
-			_locationName = *it;
-			break;
-		}
-		else
-		{
-			path = "";
-			extension = "";
-			root = "";
 		}
 	}
+
+	// initialiser l'environnement CGI
 	initEnv(this->_env);
 }
 

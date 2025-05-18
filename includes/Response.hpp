@@ -24,6 +24,8 @@ class Response{
 		std::string _requestBody;
 		std::string generateAutoIndex(const std::string &directoryPath, const std::string &requestPath);
 		void handleNotFound();
+		std::string _sessionId;           // current session ID
+		std::vector<std::pair<std::string, std::string>> _responseHeaders;
 
 	public :
 		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
@@ -39,4 +41,5 @@ class Response{
 		void handleHttpVersionNotSupported(const std::string &version);
 		void handleRedirect(const std::string &redirectUrl);
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html", bool closeConnection = false);
+		void addCookie(const std::string &name, const std::string &value, const std::string &path = "/", const std::string &domain = "", int maxAge = 0);
 };

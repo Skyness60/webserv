@@ -16,6 +16,7 @@ SRC = srcs/main.cpp \
 		srcs/EpollManager.cpp \
 		srcs/CGIManager.cpp	\
 		srcs/DdosProtection.cpp \
+		srcs/SessionManager.cpp \
 
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 

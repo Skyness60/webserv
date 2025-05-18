@@ -1,4 +1,5 @@
 #include "Response.hpp"
+#include "SessionManager.hpp"
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -50,6 +51,17 @@ static std::string getContentType(const std::string &path) {
     if (path.find(".png") != std::string::npos)
         return "image/png";
     return "application/octet-stream";
+}
+
+static SessionManager sessionManager(3600); // Timeout de 1 heure
+
+// parse Cookie header for a given name
+static std::string parseCookieHeader(const std::string &hdr, const std::string &name) {
+    size_t pos = hdr.find(name + "=");
+    if (pos == std::string::npos) return "";
+    pos += name.size() + 1;
+    size_t end = hdr.find(';', pos);
+    return hdr.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
 }
 
 void Response::dealGet() {
@@ -237,28 +249,31 @@ void Response::dealPost() {
     }
 }
 
-void Response::safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType, bool closeConnection) {
+void Response::safeSend(int statusCode,
+                        const std::string &statusMessage,
+                        const std::string &body,
+                        const std::string &contentType,
+                        bool closeConnection)
+{
     std::ostringstream response;
     response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
     response << "Content-Type: " << contentType << "\r\n";
-    
-    if (closeConnection || statusCode == 413) {
-        response << "Connection: close\r\n";
-    } else {
-        response << "Connection: keep-alive\r\n";
-    }
-    
-    if (statusCode == 405) {
+    response << (closeConnection || statusCode == 413
+                 ? "Connection: close\r\n"
+                 : "Connection: keep-alive\r\n");
+    if (statusCode == 405)
         response << "Allow: GET, POST, DELETE\r\n";
+    // inject all stored response headers (e.g. Set-Cookie)
+    for (size_t i = 0; i < _responseHeaders.size(); ++i) {
+        response << _responseHeaders[i].first
+                 << ": " << _responseHeaders[i].second << "\r\n";
     }
-    response << "\r\n";
-    response << body;
+    response << "\r\n" << body;
 
-    std::string responseStr = response.str();
-    std::cout << "Sending response: \n" << responseStr.substr(0, std::min((size_t)200, responseStr.size())) << (responseStr.size() > 200 ? "..." : "") << std::endl;
-    
-    send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
+    std::string respStr = response.str();
+    send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL);
+    _responseHeaders.clear();
 }
 
 void Response::handlePayloadTooLarge(size_t maxSize) {
@@ -278,6 +293,18 @@ void Response::handleUriTooLong(size_t maxLength) {
 }
 
 void Response::oriente() {
+    {
+        std::string cookieHdr = _requestHeaders.count("Cookie") ? _requestHeaders["Cookie"] : "";
+        std::string sid = parseCookieHeader(cookieHdr, "SESSIONID");
+        bool newSession = !sessionManager.isValidSession(sid);
+        if (newSession) sid = sessionManager.createSession();
+        _sessionId = sid;
+        if (newSession) {
+            addCookie("SESSIONID", sid, "/", "", /* timeout */ 3600);
+        }
+    }
+
+    // --- REDIRECTION / ROUTAGE ---
     std::string requestPath = this->_request.getPath();
     std::string redirectDirective = this->_config.getLocationValue(_indexServ, requestPath, "return");
     
@@ -324,44 +351,23 @@ void Response::oriente() {
 }
 
 bool Response::isCGI(std::string path) {
-	for (size_t i = 0; i < this->_config.getLocationName(_indexServ).size(); i++) {
-		std::string location = this->_config.getLocationName(_indexServ)[i];
-		if (location.size() >= 9)
-			location = location.substr(9);
-		else
-			continue;
-		if (path.find(location) != std::string::npos) {
-			std::cout << "REQUETE : " << this->_request.getPath() << std::endl;
-			if (path.find(".py") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".pl") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".php") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".rb") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".cgi") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".sh") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".js") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".jsp") != std::string::npos) {
-				return true;
-			}
-			if (path.find(".asp") != std::string::npos) {
-				return true;
-			}
-		}
-	}
-	return false;
+    // extraire l'extension (sans le point)
+    size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = path.substr(dot + 1);
+
+    // comparer à chaque location configurée
+    for (std::string loc : _config.getLocationName(_indexServ)) {
+        std::string extList = _config.getLocationValue(_indexServ, loc, "cgi_extension");
+        if (extList.empty()) continue;
+        std::istringstream iss(extList);
+        std::string token;
+        while (iss >> token) {
+            if (token == ext || token == "." + ext)
+                return true;
+        }
+    }
+    return false;
 }
 
 void Response::handleNotFound() {
@@ -417,5 +423,18 @@ void Response::handleRedirect(const std::string &redirectUrl) {
     std::cout << "Sending redirect response to: " << redirectUrl << std::endl;
     
     send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
+}
+
+void Response::addCookie(const std::string &name,
+                         const std::string &value,
+                         const std::string &path,
+                         const std::string &domain,
+                         int maxAge)
+{
+    std::ostringstream cookie;
+    cookie << name << "=" << value << "; Path=" << path;
+    if (!domain.empty())  cookie << "; Domain=" << domain;
+    if (maxAge > 0)       cookie << "; Max-Age=" << maxAge;
+    _responseHeaders.emplace_back("Set-Cookie", cookie.str());
 }
 
