@@ -3,36 +3,62 @@
 CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request)
     : _config(config), _serverIndex(serverIndex), _request(request)
 {
-	// initialise _root au root déclaré au niveau du server
 	_root = _config.getConfigValue(serverIndex, "root");
 
-	// déterminer l'extension demandée (sans le point)
 	std::string reqPath = _request.getPath();
 	size_t dot = reqPath.find_last_of('.');
+	std::cout << "reqPath: " << reqPath << std::endl;
 	std::string reqExt = (dot != std::string::npos) ? reqPath.substr(dot + 1) : "";
+	std::cout << "reqExt: " << reqExt << std::endl;
 
-	// parcourir toutes les locations pour trouver la correspondance cgi_extension
-	const std::vector<std::string> &locations = _config.getLocationName(serverIndex);
-	for (std::vector<std::string>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
-		std::string cgiExt = _config.getLocationValue(serverIndex, *it, "cgi_extension");
-		if (cgiExt.empty()) continue;
-		if (cgiExt == reqExt || cgiExt == "." + reqExt) {
-			// on a trouvé la bonne location CGI
-			_extension = cgiExt;
-			_path      = _config.getLocationValue(serverIndex, *it, "cgi_path");
-
-			std::string cgiRoot = _config.getLocationValue(serverIndex, *it, "cgi_root");
-			if (!cgiRoot.empty())
-				_root = cgiRoot;
-			else
-				_root = _config.getConfigValue(serverIndex, "root");  // serveur-level root
-
-			_locationName = *it;
-			break;
+	std::string scriptPath = _root + "/" + reqPath;
+	std::ifstream scriptFile(scriptPath.c_str());
+	std::string shebangInterpreter;
+	if (scriptFile.is_open()) {
+		std::string shebang;
+		std::getline(scriptFile, shebang);
+		if (shebang.substr(0, 2) == "#!") {
+			shebangInterpreter = shebang.substr(2);
+			size_t pos = shebangInterpreter.find_first_of(" \t");
+			if (pos != std::string::npos) {
+				shebangInterpreter = shebangInterpreter.substr(0, pos);
+			}
+			std::cout << "Shebang interpreter found: " << shebangInterpreter << std::endl;
 		}
+		scriptFile.close();
 	}
 
-	// initialiser l'environnement CGI
+	if (!shebangInterpreter.empty()) {
+		_path = shebangInterpreter;
+		_extension = reqExt;
+		_locationName = "";
+	} else {
+		const std::vector<std::string> &locations = _config.getLocationName(serverIndex);
+		for (std::vector<std::string>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+			std::string cgiExt = _config.getLocationValue(serverIndex, *it, "cgi_extension");
+			if (cgiExt.empty()) continue;
+			std::istringstream iss(cgiExt);
+			std::string extToken;
+			while (iss >> extToken) {
+				std::cout << "Testing extToken: " << extToken << std::endl;
+				if (extToken == reqExt || extToken == "." + reqExt) {
+					_extension = extToken;
+					_path      = _config.getLocationValue(serverIndex, *it, "cgi_path");
+
+					std::string cgiRoot = _config.getLocationValue(serverIndex, *it, "cgi_root");
+					if (!cgiRoot.empty())
+						_root = cgiRoot;
+					else
+						_root = _config.getConfigValue(serverIndex, "root");
+
+					_locationName = *it;
+					goto found_cgi;
+				}
+			}
+		}
+	}
+found_cgi:
+
 	initEnv(this->_env);
 }
 
@@ -196,7 +222,6 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		dup2(pipe_out[1], STDOUT_FILENO);
 		close(pipe_in[0]);
 		close(pipe_out[1]);
-		std::cout << "Script path: " << scriptPath << std::endl;
 		char *args[3];
 		args[0] = new char[this->_path.size() + 1];
 		strcpy(args[0], this->_path.c_str());
