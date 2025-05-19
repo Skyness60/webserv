@@ -475,7 +475,6 @@
                                         }
                                     })
                                     .catch(() => {
-                                        // Can't check file existence, follow normal retry path
                                         if (retryCount < maxRetries) {
                                             setTimeout(() => {
                                                 attemptSave(retryCount + 1, maxRetries);
@@ -488,7 +487,6 @@
                         }, delay);
                     };
                     
-                    // Start the save attempt process
                     attemptSave();
                 } catch (err) {
                     console.error('Error saving playlist:', err);
@@ -500,17 +498,29 @@
                 try {
                     localStorage.removeItem(playlistId);
                     
-                    songsContainer.innerHTML = '<div class="empty-message">Your playlist is empty. Add some Britney songs! 💃</div>';
+                    showStatus('Deleting playlist...', 'info');
                     
-                    fetch('/Playlist/playlist.txt', {
+                    fetch('/playlist.txt', {
                         method: 'DELETE'
                     })
                     .then(response => {
                         if (response.ok) {
                             showStatus('Playlist deleted from server successfully! 🗑️', 'success');
-                        } else {
+                            songsContainer.innerHTML = '<div class="empty-message">Your playlist is empty. Add some Britney songs! 💃</div>';
+                        } 
+                        else if (response.status === 403) {
+                            // Handle forbidden error
+                            showStatus('Cannot delete playlist: Permission denied! 🔒', 'error');
+                            // Reload the playlist since we couldn't delete it
+                            loadPlaylist(playlistId);
+                            return response.text();
+                        }
+                        else {
                             throw new Error('Server error: ' + response.status);
                         }
+                    })
+                    .then(text => {
+                        if (text) console.error('Server response:', text);
                     })
                     .catch(error => {
                         console.error('Error deleting playlist from server:', error);
@@ -524,10 +534,8 @@
             
             function downloadPlaylist(playlistId) {
                 try {
-                    // Get the playlist data from localStorage
                     const playlistData = JSON.parse(localStorage.getItem(playlistId) || '{"name":"My Britney Playlist","songs":[]}');
                     
-                    // Create a format selection dialog
                     const formatDialog = document.createElement('div');
                     formatDialog.className = 'format-dialog';
                     formatDialog.innerHTML = `
@@ -543,7 +551,6 @@
                     `;
                     document.body.appendChild(formatDialog);
                     
-                    // Add styles for the dialog
                     const style = document.createElement('style');
                     style.textContent = `
                         .format-dialog {

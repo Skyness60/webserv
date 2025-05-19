@@ -84,16 +84,23 @@ void Response::dealGet() {
         std::cout << "indexFile :" << indexFile << std::endl;
         if (indexFile.empty() && this->_request.getPath() == "/") {
             indexFile = _config.getConfigValue(_indexServ, "index");
-        } else if (indexFile.empty()) {
+        } 
+        
+        if (!indexFile.empty()) {
+            fullPath += "/" + indexFile;
+        } else {
             std::string autoIndex = _config.getLocationValue(_indexServ, this->_request.getPath(), "autoindex");
             if (autoIndex == "on") {
                 std::string autoIndexPage = generateAutoIndex(fullPath, this->_request.getPath());
                 safeSend(200, "OK", autoIndexPage, "text/html");
                 return;
+            } else {
+                safeSend(403, "Forbidden", "Directory listing not allowed.", "text/plain");
+                return;
             }
         }
-        fullPath += "/" + indexFile;
     }
+
 
     if (isCGI(this->_request.getPath())) {
         CGIManager cgi(_config, _indexServ, this->_request);
@@ -139,7 +146,6 @@ std::string Response::generateAutoIndex(const std::string &directoryPath, const 
 
 void Response::dealDelete() {
     std::string requestPath = this->_requestPath;
-    
     std::string rootPath = "";
     rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
     
@@ -173,10 +179,15 @@ void Response::dealDelete() {
         return;
     }
 
+    if (access(fullPath.c_str(), W_OK) != 0) {
+        safeSend(403, "Forbidden", "You don't have permission to delete this file.\n", "text/plain");
+        return;
+    }
+
     if (remove(fullPath.c_str()) == 0) {
         safeSend(200, "OK", "File deleted successfully.\n", "text/plain");
     } else {
-        safeSend(500, "Internal Server Error", "Failed to delete the file.", "text/plain");
+        safeSend(500, "Internal Server Error", "Failed to delete the file.\n", "text/plain");
     }
 }
 
@@ -264,7 +275,7 @@ void Response::safeSend(int statusCode,
                  : "Connection: keep-alive\r\n");
     if (statusCode == 405)
         response << "Allow: GET, POST, DELETE\r\n";
-    // inject all stored response headers (e.g. Set-Cookie)
+    
     for (size_t i = 0; i < _responseHeaders.size(); ++i) {
         response << _responseHeaders[i].first
                  << ": " << _responseHeaders[i].second << "\r\n";
@@ -397,9 +408,8 @@ void Response::handleNotFound() {
             }
         }
     }
-    
-    safeSend(404, "Not Found", "The requested file does not exist.\n", "text/plain");
 }
+
 
 void Response::handleHttpVersionNotSupported(const std::string &version) {
     std::ostringstream message;
