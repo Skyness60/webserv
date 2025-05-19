@@ -40,6 +40,19 @@ _______________
 
 _______________
 
+
+
+403: message = "Forbidden"
+
+     create file:
+                         curl -v -X POST http://localhost:2222/Playlist/test_delete.txt
+     set a restriction:
+                         chmod 000 test_delete.txt 
+     try to delete file:
+                         curl -v -X DELETE http://localhost:2222/Playlist/test_delete.txt
+
+_______________
+
 414: message = "URI Too Long"
 
      curl -v "http://localhost:2222/$(head -c 5000 < /dev/zero | tr '\0' 'A')"
