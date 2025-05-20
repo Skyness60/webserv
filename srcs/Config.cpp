@@ -207,7 +207,7 @@ void Config::processLine(const std::string &line, bool inLocationBlock, bool inS
                         currentServerConfig[key] = value;
                     }
                 }
-                else if (key == "server_name" || key == "root" || key == "index" || key == "autoindex" || key == "error_page")
+                else if (key == "server_name" || key == "root" || key == "index" || key == "autoindex" || key == "error_page" || key == "client_max_body_size")
                 {
                     if (value.empty())
                         throwError("Malformed " + key + " directive", lineCount, charCountAll, charCountLine);

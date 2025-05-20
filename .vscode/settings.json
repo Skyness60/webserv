@@ -57,7 +57,8 @@
 		"charconv": "cpp",
 		"format": "cpp",
 		"text_encoding": "cpp",
-		"variant": "cpp"
+		"variant": "cpp",
+		"set": "cpp"
 	},
 	"makefile.configureOnOpen": false
 }

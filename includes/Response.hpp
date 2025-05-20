@@ -23,7 +23,6 @@ class Response{
 		std::map<std::string, std::string> _requestHeaders;
 		std::string _requestBody;
 		std::string generateAutoIndex(const std::string &directoryPath, const std::string &requestPath);
-		void handleNotFound();
 		std::string _sessionId;           // current session ID
 		std::vector<std::pair<std::string, std::string>> _responseHeaders;
 
@@ -42,4 +41,5 @@ class Response{
 		void handleRedirect(const std::string &redirectUrl);
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html", bool closeConnection = false);
 		void addCookie(const std::string &name, const std::string &value, const std::string &path = "/", const std::string &domain = "", int maxAge = 0);
+		void handleNotFound();
 };

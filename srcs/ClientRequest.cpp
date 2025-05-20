@@ -175,6 +175,9 @@ void ClientRequest::parseContentLengthBody( std::istringstream & request_stream 
     while (totalRead < contentLength) {
         size_t toRead = std::min(bufferSize, contentLength - totalRead);
         request_stream.read(buffer, toRead);
+        if (request_stream.eof() || request_stream.bad()) {
+            break;
+        }
         size_t actualRead = request_stream.gcount();
         
         if (actualRead == 0)
@@ -204,6 +207,10 @@ void ClientRequest::parseChunkedBody(std::istringstream & request_stream) {
             
         char* buffer = new char[chunk_size];
         request_stream.read(buffer, chunk_size);
+        if (request_stream.eof() or request_stream.bad()) {
+            delete[] buffer;
+            break;
+        }
         decoded.append(buffer, chunk_size);
         
         delete[] buffer;

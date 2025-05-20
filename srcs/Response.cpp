@@ -103,8 +103,8 @@ void Response::dealGet() {
 
 
     if (isCGI(this->_request.getPath())) {
-        CGIManager cgi(_config, _indexServ, this->_request);
-        cgi.executeCGI(_client_fd, this->_request.getMethod());
+        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath());
+        cgi.executeCGI(this->_request.getMethod());
         close(_client_fd);
         return;
     }
@@ -229,8 +229,8 @@ void Response::dealPost() {
     std::string fullPath = rootPath + "/" + fileName;
     
     if (isCGI(requestPath)) {
-        CGIManager cgi(_config, _indexServ, this->_request);
-        cgi.executeCGI(_client_fd, this->_request.getMethod());
+        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath());
+        cgi.executeCGI(this->_request.getMethod());
         close(_client_fd);
         return;
     }
@@ -283,8 +283,11 @@ void Response::safeSend(int statusCode,
     response << "\r\n" << body;
 
     std::string respStr = response.str();
-    send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL);
+    if (send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL) <= 0) {
+        std::cerr << "Error sending response: " << strerror(errno) << std::endl;
+    }
     _responseHeaders.clear();
+    close(_client_fd);
 }
 
 void Response::handlePayloadTooLarge(size_t maxSize) {
@@ -390,8 +393,7 @@ void Response::handleNotFound() {
             std::string errorFile = errorPage.substr(spacePos + 1);
             
             if (errorCode == "404") {
-                std::string fullPath = "./www/" + errorFile;
-                
+                std::string fullPath = _config.getConfigValue(_indexServ, "root") + errorFile;
                 struct stat pathStat;
                 if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
                     safeSend(500, "Internal Server Error", "Error page path is a directory.\n", "text/plain");
