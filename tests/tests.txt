@@ -79,7 +79,7 @@ _______________
 
 Send a delete Request
 
-     curl -X DELETE http://localhost:2222/www/cat.jpg -v
+     curl -X DELETE http://localhost:2222/cat.jpeg -v
 
 _______________
 

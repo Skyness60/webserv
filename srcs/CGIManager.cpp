@@ -1,8 +1,16 @@
 #include "CGIManager.hpp"
 
-CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request)
-    : _config(config), _serverIndex(serverIndex), _request(request)
+CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName)
+    :  _config(config), _serverIndex(serverIndex), _request(request)
 {
+	_locationName = locationName;
+	size_t lastSlash = _locationName.find_last_of('/');
+	if (lastSlash != std::string::npos) {
+		_locationName = _locationName.substr(0, lastSlash + 1);
+	}
+	std::cout << "locationName: " << _locationName << std::endl;
+	_client_fd = client_fd;
+	_response = new Response(client_fd, request, config, serverIndex);
 	_root = _config.getConfigValue(serverIndex, "root");
 
 	std::string reqPath = _request.getPath();
@@ -31,10 +39,10 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request)
 	if (!shebangInterpreter.empty()) {
 		_path = shebangInterpreter;
 		_extension = reqExt;
-		_locationName = "";
 	} else {
 		const std::vector<std::string> &locations = _config.getLocationName(serverIndex);
 		for (std::vector<std::string>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+			if (_locationName not_eq(*it)) continue;
 			std::string cgiExt = _config.getLocationValue(serverIndex, *it, "cgi_extension");
 			if (cgiExt.empty()) continue;
 			std::istringstream iss(cgiExt);
@@ -44,14 +52,13 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request)
 				if (extToken == reqExt || extToken == "." + reqExt) {
 					_extension = extToken;
 					_path      = _config.getLocationValue(serverIndex, *it, "cgi_path");
-
 					std::string cgiRoot = _config.getLocationValue(serverIndex, *it, "cgi_root");
+					std::cout << "======================cgiRoot: " << cgiRoot << std::endl;
 					if (!cgiRoot.empty())
 						_root = cgiRoot;
 					else
 						_root = _config.getConfigValue(serverIndex, "root");
 
-					_locationName = *it;
 					goto found_cgi;
 				}
 			}
@@ -62,7 +69,7 @@ found_cgi:
 	initEnv(this->_env);
 }
 
-CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverIndex(copy._serverIndex), _request(copy._request)
+CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverIndex(copy._serverIndex), _request(copy._request), _response(copy._response)
 {
 	_extension = copy._extension;
 	_path = copy._path;
@@ -82,7 +89,9 @@ CGIManager &CGIManager::operator=(const CGIManager &copy) {
 	return *this;
 }
 
-CGIManager::~CGIManager() {}
+CGIManager::~CGIManager() {
+	delete _response;
+}
 
 void CGIManager::initEnv(std::map<std::string, std::string> &env) {
 	env["GATEWAY_INTERFACE"] = "CGI/1.1";
@@ -167,9 +176,9 @@ static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodyS
 }
 
 
-void CGIManager::executeCGI(int client_fd, const std::string &method) {
-	(void)client_fd;
+void CGIManager::executeCGI(const std::string &method) {
 	(void)method;
+	
 	int pipe_in[2];
 	int pipe_out[2];
 	if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
@@ -183,6 +192,7 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 	}
 	if (pid == 0) {
 		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
+		std::cout << "Script path: ==================== " << scriptPath << std::endl;
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
 			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
@@ -239,37 +249,49 @@ void CGIManager::executeCGI(int client_fd, const std::string &method) {
 		close(pipe_in[0]);
 		close(pipe_out[1]);
 		const std::string &body = _request.getBody();
-		write(pipe_in[1], body.c_str(), body.size());
+		if (write(pipe_in[1], body.c_str(), body.size()) < 0) {
+			perror("write");
+			close(pipe_in[1]);
+			return;
+		}
 		close(pipe_in[1]);
 		char buffer[4096];
 		ssize_t bytesRead;
 		std::string cgiOutput;
-		while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0)
+		while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0) {
 			cgiOutput.append(buffer, bytesRead);
+		}
+
+		if (bytesRead == -1) {
+			perror("read");
+			std::cerr << "Error reading from CGI output pipe" << std::endl;
+			close(pipe_out[0]);
+			close(_client_fd);
+			_response->handleNotFound();
+			return;
+		}
 		close(pipe_out[0]);
 		int status;
 		waitpid(pid, &status, 0);
-		if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+		if (WIFEXITED(status) and WEXITSTATUS(status) not_eq 0) {
 			std::cerr << "CGI script exited with status: " << WEXITSTATUS(status) << std::endl;
-			std::string errorMsg = "CGI script failed with status: " + std::to_string(WEXITSTATUS(status));
-			send(client_fd, errorMsg.c_str(), errorMsg.length(), 0);
+			_response->handleNotFound();
 			return;
 		}
-		std::cout << "----- CGI OUTPUT BEGIN -----" << std::endl;
-		std::cout << cgiOutput << std::endl;
-		std::cout << "----- CGI OUTPUT END   -----" << std::endl;
 		std::pair<std::string, std::string> parsed = parseCGIResponse(cgiOutput);
 		std::string response = "HTTP/1.1 200 OK\r\n";
 		response += buildFinalHeaders(parsed.first, parsed.second.size());
 		response += "\r\n";
 		response += parsed.second;
-		send(client_fd, response.c_str(), response.length(), 0);
+		if (send(_client_fd, response.c_str(), response.length(), 0) <= 0) {
+			std::cerr << "Error sending response: " << strerror(errno) << std::endl;
+		}
 		
 		// Properly close the connection after sending the response
-		if (shutdown(client_fd, SHUT_RDWR) < 0) {
-			std::cerr << "Shutdown error on client_fd " << client_fd << ": " << strerror(errno) << std::endl;
+		if (shutdown(_client_fd, SHUT_RDWR) < 0) {
+			std::cerr << "Shutdown error on client_fd " << _client_fd << ": " << strerror(errno) << std::endl;
 		}
-		close(client_fd);
+		close(_client_fd);
 	}
 }
 
