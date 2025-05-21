@@ -1,4 +1,4 @@
-CXX = c++
+CXX = c++ -g3
 CXXFLAGS = -Wall -Werror -Wextra -std=c++11 -MMD
 SRC_DIR = srcs
 OBJ_DIR = obj

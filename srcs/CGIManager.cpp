@@ -2,8 +2,8 @@
 #include <sys/select.h>    
 #include <signal.h>        
 
-CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName)
-    :  _config(config), _serverIndex(serverIndex), _request(request)
+CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName, std::vector<int> &server_fds, int &epoll_fd)
+    :  _config(config), _serverIndex(serverIndex), _request(request), _server_fds(server_fds), _epoll_fd(epoll_fd)
 {
 	_locationName = locationName;
 	size_t lastSlash = _locationName.find_last_of('/');
@@ -11,7 +11,7 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, 
 		_locationName = _locationName.substr(0, lastSlash + 1);
 	}
 	_client_fd = client_fd;
-	_response = new Response(client_fd, request, config, serverIndex);
+	_response = new Response(client_fd, request, config, serverIndex, server_fds, epoll_fd);
 	_root = _config.getConfigValue(serverIndex, "root");
 
 	std::string reqPath = _request.getPath();
@@ -65,8 +65,15 @@ found_cgi:
 	initEnv(this->_env);
 }
 
-CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverIndex(copy._serverIndex), _request(copy._request), _response(copy._response)
+CGIManager::CGIManager(const CGIManager &copy)
+	: _config(copy._config),
+	  _serverIndex(copy._serverIndex),
+	  _request(copy._request),
+	  _server_fds(copy._server_fds),
+	  _epoll_fd(copy._epoll_fd),
+	  _response(copy._response)
 {
+	_client_fd = copy._client_fd;
 	_extension = copy._extension;
 	_path = copy._path;
 	_root = copy._root;
@@ -76,6 +83,8 @@ CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverI
 CGIManager &CGIManager::operator=(const CGIManager &copy) {
 	if (this != &copy) {
 		_config = copy._config;
+		_server_fds = copy._server_fds;
+		_epoll_fd = copy._epoll_fd;
 		_serverIndex = copy._serverIndex;
 		_extension = copy._extension;
 		_path = copy._path;
@@ -188,16 +197,22 @@ void CGIManager::executeCGI(const std::string &method) {
         return;
     }
     if (pid == 0) {
+		char *args[3];
+		char **env = NULL;
         // CHILD
         std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
 			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
 			close(pipe_in[0]);
-			close(pipe_out[0]);
-			close(pipe_in[1]);
 			close(pipe_out[1]);
+			close(pipe_in[1]);
+			close(pipe_out[0]);
+			this->_response->cleanup(this->_epoll_fd, this->_server_fds);
+			_response->handleNotFound();
 			close(_client_fd);
+			delete _response;
+			_response = NULL;
 			exit(EXIT_FAILURE);
 		}
 		std::string shebang;
@@ -228,13 +243,12 @@ void CGIManager::executeCGI(const std::string &method) {
 			std::cerr << "Error: CGI interpreter not found or not executable: " << this->_path << std::endl;
 			exit(EXIT_FAILURE);
 		}
-		char **env = createEnvArray();
+		env = createEnvArray();
 		dup2(pipe_in[0], STDIN_FILENO);
 		dup2(pipe_out[1], STDOUT_FILENO);
 		dup2(pipe_out[1], STDERR_FILENO); 
 		close(pipe_in[1]);
         close(pipe_out[0]);
-		char *args[3];
 		args[0] = new char[this->_path.size() + 1];
 		strcpy(args[0], this->_path.c_str());
 		args[1] = new char[scriptPath.size() + 1];

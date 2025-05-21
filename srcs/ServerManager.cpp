@@ -42,25 +42,26 @@ void ServerManager::startServer() {
     SocketManager socketManager;
     EpollManager epollManager;
 
-    std::vector<int> server_fds;
+    int serverCount = getServersCount();
+    if (serverCount < 0) {
+        return;
+    }
+    this->_server_fds.reserve(static_cast<size_t>(serverCount));
     for (int i = 0; i < getServersCount(); ++i) {
         std::string listenValue = getConfigValue(i, "listen");
         int server_fd = socketManager.createAndBindSocket(i, listenValue);
-        if (server_fd != -1) server_fds.push_back(server_fd);
+        if (server_fd != -1) this->_server_fds.push_back(server_fd);
     }
-
-    int epoll_fd = epollManager.setupEpollInstance(server_fds);
-    if (epoll_fd == -1) return;
-
+    this->_epoll_fd = epollManager.setupEpollInstance(this->_server_fds);
+    if (this->_epoll_fd == -1) return;
     SignalHandler::setupSignalHandlers();
-
-    epollManager.eventLoop(epoll_fd, server_fds,
-        [this, epoll_fd](int server_fd) { handleNewConnection(server_fd, epoll_fd); },
-        [this, epoll_fd](int client_fd) { handleClientRequest(client_fd, epoll_fd); },
+    epollManager.eventLoop(this->_epoll_fd, this->_server_fds,
+        [this](int server_fd) { handleNewConnection(server_fd, this->_epoll_fd); },
+        [this](int client_fd) { handleClientRequest(client_fd, this->_epoll_fd); },
 		[this](int client_fd) { handleWriteReady(client_fd); }
     );
 
-    cleanup(epoll_fd, server_fds);
+    cleanup(this->_epoll_fd, this->_server_fds);
 }
 
 
@@ -179,7 +180,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             
             if (!preRequest.isHttpVersionSupported()) {
                 std::cerr << "HTTP version not supported: " << preRequest.getHttpVersion() << std::endl;
-                Response response(client_fd, preRequest, _config, this->_port);
+                Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handleHttpVersionNotSupported(preRequest.getHttpVersion());
                 close(client_fd);
                 epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
@@ -188,7 +189,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             
             if (preRequest.isUriTooLong()) {
                 std::cerr << "URI too long: " << client_fd << std::endl;
-                Response response(client_fd, preRequest, _config, this->_port);
+                Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handleUriTooLong(REQUEST_MAX_URI_LENGTH);
                 close(client_fd);
                 epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
@@ -197,7 +198,7 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 
             if (!preRequest.isBodySizeValid()) {
                 std::cerr << "Request payload too large: " << client_fd << std::endl;
-                Response response(client_fd, preRequest, _config, this->_port);
+                Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handlePayloadTooLarge(maxBodySize);
                 close(client_fd);
                 epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
@@ -218,12 +219,12 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             }
         }
         
-        Response response(client_fd, request, _config, this->_port);
+        Response response(client_fd, request, _config, this->_port, this->_server_fds, epoll_fd);
         response.oriente();
     } else {
         std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
         ClientRequest emptyRequest;
-        Response response(client_fd, emptyRequest, _config, this->_port);
+        Response response(client_fd, emptyRequest, _config, this->_port, this->_server_fds, epoll_fd);
         response.safeSend(400, "Bad Request", "Bad Request: The server couldn't parse the request.", "text/plain", true);
         
         std::cerr << "Fermeture de la connexion après erreur 400: " << client_fd << std::endl;
@@ -246,12 +247,14 @@ void ServerManager::handleWriteReady(int client_fd) {
 
 
 
-void ServerManager::cleanup(int epoll_fd, const std::vector<int> &server_fds) {
-    LOG_INFO("cleanup: epoll_fd=" << epoll_fd << ", servers=" << server_fds.size());
-    close(epoll_fd);
+void ServerManager::cleanup(int _epoll_fd, const std::vector<int> &server_fds) {
+    if (_epoll_fd != -1) {
+        close(_epoll_fd);
+    }
     for (std::vector<int>::const_iterator it = server_fds.begin(); it != server_fds.end(); ++it) {
         close(*it);
     }
+    const_cast<std::vector<int>&>(server_fds).clear();
 }
 
 

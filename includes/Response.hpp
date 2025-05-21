@@ -13,6 +13,8 @@ class CGIManager;
 class Response{
 	private :
 		int _client_fd;
+		std::vector<int> &_server_fds;
+		int &_epoll_fd;
 		Config	&_config;
 		std::pair<std::string, void (Response::*)()> _func[4];
 		ClientRequest &_request;
@@ -27,7 +29,7 @@ class Response{
 		std::vector<std::pair<std::string, std::string>> _responseHeaders;
 
 	public :
-		Response(int fd, ClientRequest &request, Config &serv_conf, int index);
+		Response(int fd, ClientRequest &request, Config &serv_conf, int index, std::vector<int> &server_fds, int &epoll_fd);
 		~Response();
 		Response(const Response &other);
 		Response &operator=(const Response &other);
@@ -42,8 +44,7 @@ class Response{
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html", bool closeConnection = false);
 		void addCookie(const std::string &name, const std::string &value, const std::string &path = "/", const std::string &domain = "", int maxAge = 0);
 		void handleNotFound();
-
-		
+		void cleanup(int _epoll_fd, const std::vector<int> &server_fds);
 		void setSessionData(const std::string &key, const std::string &value);
 		std::string getSessionData(const std::string &key) const;
 };
