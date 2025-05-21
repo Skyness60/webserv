@@ -210,7 +210,6 @@ void CGIManager::executeCGI(const std::string &method) {
         std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
-			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
 			close(pipe_in[0]);
 			close(pipe_out[1]);
 			close(pipe_in[1]);
@@ -227,7 +226,6 @@ void CGIManager::executeCGI(const std::string &method) {
 		std::string shebang;
 		std::getline(scriptFile, shebang);
 		if (shebang.substr(0, 2) != "#!" and this->_path.empty()) {
-			std::cerr << "Error: Invalid CGI script: " << scriptPath << std::endl;
 			exit(EXIT_FAILURE);
 		}
 		else if (shebang.substr(0, 2) == "#!" and this->_path.empty()) {
@@ -240,16 +238,13 @@ void CGIManager::executeCGI(const std::string &method) {
 		}
 		scriptFile.close();
 		if (this->_path.empty()) {
-			std::cerr << "Error: No interpreter found for script: " << scriptPath << std::endl;
 			exit(EXIT_FAILURE);
 		}
 		struct stat pathStat;
 		if (stat(this->_path.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-			std::cerr << "Error: CGI interpreter path is a directory: " << this->_path << std::endl;
 			exit(EXIT_FAILURE);
 		}
 		if (access(this->_path.c_str(), F_OK) == -1 || access(this->_path.c_str(), X_OK) == -1) {
-			std::cerr << "Error: CGI interpreter not found or not executable: " << this->_path << std::endl;
 			exit(EXIT_FAILURE);
 		}
 		env = createEnvArray();
@@ -306,7 +301,6 @@ void CGIManager::executeCGI(const std::string &method) {
 
 		if (bytesRead == -1) {
 			perror("read");
-			std::cerr << "Error reading from CGI output pipe" << std::endl;
 			close(pipe_out[0]);
 			close(_client_fd);
 			_response->handleNotFound();
@@ -317,7 +311,6 @@ void CGIManager::executeCGI(const std::string &method) {
 		int status;
 		waitpid(pid, &status, 0);
 		if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-			std::cerr << "CGI script exited with status: " << WEXITSTATUS(status) << std::endl;
 			_response->safeSend(500, "Internal Server Error",
                                 "CGI script error.\n",
                                 "text/plain", true);

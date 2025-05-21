@@ -16,7 +16,7 @@ _______________
 
 413: message = "Payload Too Large"
 
-     Test with a body larger than 5MB limit (should be rejected)
+     Test with a body larger than 5MB limit (should be rejected - 413)
           curl -X POST -H "Content-Type: text/plain" --data-binary @<(head -c 10M /dev/urandom) http://localhost:2222/ -v
 
      Test with a body smaller than 5MB limit (should be accepted - 201 )
@@ -47,7 +47,7 @@ _______________
      create file:
                          curl -v -X POST http://localhost:2222/Playlist/test_delete.txt
      set a restriction:
-                         chmod 000 test_delete.txt 
+                         chmod 000 www/test_delete.txt 
      try to delete file:
                          curl -v -X DELETE http://localhost:2222/Playlist/test_delete.txt
 

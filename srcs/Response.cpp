@@ -147,10 +147,8 @@ void Response::dealGet() {
         std::string alias = this->_config.getLocationValue(_indexServ, cgiRequestPath, "alias");
         if (!alias.empty()) {
             cgiPath = alias;
-            std::cout << alias << std::endl;
         } else if (!cgiRoot.empty()) {
             cgiPath = cgiRoot;
-            std::cout << cgiRoot << std::endl;
         } else {
             cgiPath = fullPath;
         }
@@ -377,7 +375,6 @@ void Response::safeSend(int statusCode,
 
     std::string respStr = response.str();
     if (send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL) <= 0) {
-        std::cerr << "Error sending response" << std::endl;
 		return ;
     }
     _responseHeaders.clear();
@@ -395,7 +392,7 @@ void Response::handlePayloadTooLarge(size_t maxSize) {
 void Response::handleUriTooLong(size_t maxLength) {
     std::ostringstream message;
     message << "The requested URI exceeds the maximum allowed length of " 
-            << maxLength << " characters.";
+            << maxLength << " characters.\n";
     
     safeSend(414, "URI Too Long", message.str(), "text/plain", true);
 }
@@ -521,7 +518,7 @@ void Response::handleNotFound() {
 void Response::handleHttpVersionNotSupported(const std::string &version) {
     std::ostringstream message;
     message << "HTTP Version \"" << version << "\" is not supported. This server only supports "
-            << HTTP_SUPPORTED_VERSION << ".";
+            << HTTP_SUPPORTED_VERSION << "." << std::endl;
     
     safeSend(505, "HTTP Version Not Supported", message.str(), "text/plain", true);
 }

@@ -37,7 +37,7 @@ int SocketManager::createAndBindSocket(int serverIndex, const std::string &liste
         return -1;
     }
 
-    std::cout << "Serveur " << serverIndex << " en écoute sur le port " << port << std::endl;
+    std::cout << FGRN("Serveur ") << serverIndex << FGRN(" en écoute sur le port ") << port << std::endl;
     return server_fd;
 }
 

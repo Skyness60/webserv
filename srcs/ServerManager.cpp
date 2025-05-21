@@ -38,7 +38,7 @@ void ServerManager::loadConfig() {
 
 
 void ServerManager::startServer() {
-    LOG_INFO("startServer called");
+    LOG_INFO(FGRN("startServer called"));
     SocketManager socketManager;
     EpollManager epollManager;
 
@@ -179,7 +179,6 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             preRequest.parseHeaders(tempStream);
             
             if (!preRequest.isHttpVersionSupported()) {
-                std::cerr << "HTTP version not supported: " << preRequest.getHttpVersion() << std::endl;
                 Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handleHttpVersionNotSupported(preRequest.getHttpVersion());
                 close(client_fd);
@@ -188,7 +187,6 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             }
             
             if (preRequest.isUriTooLong()) {
-                std::cerr << "URI too long: " << client_fd << std::endl;
                 Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handleUriTooLong(REQUEST_MAX_URI_LENGTH);
                 close(client_fd);
@@ -197,7 +195,6 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             }
 
             if (!preRequest.isBodySizeValid()) {
-                std::cerr << "Request payload too large: " << client_fd << std::endl;
                 Response response(client_fd, preRequest, _config, this->_port, this->_server_fds, epoll_fd);
                 response.handlePayloadTooLarge(maxBodySize);
                 close(client_fd);
@@ -222,12 +219,10 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
         Response response(client_fd, request, _config, this->_port, this->_server_fds, epoll_fd);
         response.oriente();
     } else {
-        std::cerr << "Échec de l'analyse de la requête du client: " << client_fd << std::endl;
         ClientRequest emptyRequest;
         Response response(client_fd, emptyRequest, _config, this->_port, this->_server_fds, epoll_fd);
-        response.safeSend(400, "Bad Request", "Bad Request: The server couldn't parse the request.", "text/plain", true);
+        response.safeSend(400, "Bad Request", "Bad Request: The server couldn't parse the request.\n", "text/plain", true);
         
-        std::cerr << "Fermeture de la connexion après erreur 400: " << client_fd << std::endl;
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
     }
