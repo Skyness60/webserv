@@ -178,21 +178,26 @@ void CGIManager::executeCGI(const std::string &method) {
 
     int pipe_in[2];
     int pipe_out[2];
-	if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-		perror("pipe");
-		return;
-	}
-	pid_t pid = fork();
-	if (pid == -1) {
-		perror("fork");
-		return;
-	}
-	if (pid == 0) {
-		
-		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
+    if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
+        perror("pipe");
+        return;
+    }
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        return;
+    }
+    if (pid == 0) {
+        // CHILD
+        std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
 			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
+			close(pipe_in[0]);
+			close(pipe_out[0]);
+			close(pipe_in[1]);
+			close(pipe_out[1]);
+			close(_client_fd);
 			exit(EXIT_FAILURE);
 		}
 		std::string shebang;
@@ -227,8 +232,8 @@ void CGIManager::executeCGI(const std::string &method) {
 		dup2(pipe_in[0], STDIN_FILENO);
 		dup2(pipe_out[1], STDOUT_FILENO);
 		dup2(pipe_out[1], STDERR_FILENO); 
-		close(pipe_in[0]);
-		close(pipe_out[1]);
+		close(pipe_in[1]);
+        close(pipe_out[0]);
 		char *args[3];
 		args[0] = new char[this->_path.size() + 1];
 		strcpy(args[0], this->_path.c_str());
@@ -242,35 +247,39 @@ void CGIManager::executeCGI(const std::string &method) {
 		delete [] env;
 		exit(EXIT_FAILURE);
 	}
-	else {
-		
-		close(pipe_in[0]);
-		close(pipe_out[1]);
+    else {
 
-		
-		fd_set rfds;
-		FD_ZERO(&rfds);
-		FD_SET(pipe_out[0], &rfds);
-		struct timeval tv;
-		tv.tv_sec = CGI_TIMEOUT;
-		tv.tv_usec = 0;
-		int sel = select(pipe_out[0] + 1, &rfds, NULL, NULL, &tv);
+        close(pipe_in[0]);
+        close(pipe_out[1]);
+
+        std::string body = _request.getBody();
+        if (!body.empty()) {
+            ssize_t totalWritten = 0;
+            ssize_t toWrite = body.size();
+            const char* buf = body.c_str();
+            while (totalWritten < toWrite) {
+                ssize_t written = write(pipe_in[1], buf + totalWritten, toWrite - totalWritten);
+                if (written <= 0) break;
+                totalWritten += written;
+            }
+        }
+        close(pipe_in[1]);
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(pipe_out[0], &rfds);
+        struct timeval tv;
+        tv.tv_sec = CGI_TIMEOUT;
+        tv.tv_usec = 0;
+        int sel = select(pipe_out[0] + 1, &rfds, NULL, NULL, &tv);
 		if (sel == 0) {
-			
-			kill(pid, SIGKILL);
-			close(pipe_out[0]);
-			_response->safeSend(500, "Internal Server Error",
-                                "CGI script timed out.\n",
-                                "text/plain", true);
-			return;
 		}
-		
-		char buffer[4096];
-		ssize_t bytesRead;
-		std::string cgiOutput;
-		while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0) {
-			cgiOutput.append(buffer, bytesRead);
-		}
+        char buffer[4096];
+        ssize_t bytesRead;
+        std::string cgiOutput;
+        while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0) {
+            cgiOutput.append(buffer, bytesRead);
+        }
 
 		if (bytesRead == -1) {
 			perror("read");
@@ -320,4 +329,3 @@ std::string CGIManager::getRoot() const {
 std::string CGIManager::getLocationName() const {
 	return _locationName;
 }
-

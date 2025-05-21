@@ -356,7 +356,8 @@ void Response::safeSend(int statusCode,
 
     std::string respStr = response.str();
     if (send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL) <= 0) {
-        std::cerr << "Error sending response: " << strerror(errno) << std::endl;
+        std::cerr << "Error sending response" << std::endl;
+		return ;
     }
     _responseHeaders.clear();
     close(_client_fd);

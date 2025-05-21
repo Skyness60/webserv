@@ -70,6 +70,7 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
     int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &client_len);
     if (client_fd == -1) {
         perror("accept");
+		close(server_fd);
         return;
     }
     LOG_INFO("New connection: client_fd=" << client_fd << " on server_fd=" << server_fd);
