@@ -4,8 +4,14 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index) 
-	: _client_fd(fd), _config(serv_conf), _request(request), _indexServ(index) {
+Response::Response(int fd, ClientRequest &request, Config &serv_conf, int index, std::vector<int> &server_fds, int &epoll_fd)
+    : _client_fd(fd),
+      _server_fds(server_fds),
+      _epoll_fd(epoll_fd),
+      _config(serv_conf),
+      _request(request),
+      _indexServ(index)
+{
     this->_func[0] = std::make_pair("GET", &Response::dealGet);
     this->_func[1] = std::make_pair("POST", &Response::dealPost);
     this->_func[2] = std::make_pair("DELETE", &Response::dealDelete);
@@ -20,8 +26,9 @@ Response::~Response() {}
 Response &Response::operator=(const Response &other) {
     if (this == &other)
         return *this;
-        
+    this->_server_fds = other._server_fds;
     this->_client_fd = other._client_fd;
+    this->_epoll_fd = other._epoll_fd;
     this->_request = other._request;
     this->_config = other._config;
     this->_indexServ = other._indexServ;
@@ -38,7 +45,23 @@ Response &Response::operator=(const Response &other) {
 }
 
 Response::Response(const Response &other)
-    : _client_fd(other._client_fd), _config(other._config), _request(other._request) {}
+    : _client_fd(other._client_fd),
+      _server_fds(other._server_fds),
+        _epoll_fd(other._epoll_fd),
+      _config(other._config),
+      _request(other._request),
+      _indexServ(other._indexServ),
+      _requestMethod(other._requestMethod),
+      _requestPath(other._requestPath),
+      _requestHeaders(other._requestHeaders),
+      _requestBody(other._requestBody),
+      _sessionId(other._sessionId),
+      _responseHeaders(other._responseHeaders)
+{
+    for (size_t i = 0; i < 3; i++) {
+        this->_func[i] = other._func[i];
+    }
+}
 
 static std::string getContentType(const std::string &path) {
     if (path.find(".html") != std::string::npos)
@@ -138,7 +161,7 @@ void Response::dealGet() {
             handleNotFound();
             return;
         }
-        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath());
+        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath(), this->_server_fds, _epoll_fd);
         cgi.executeCGI(this->_request.getMethod());
         close(_client_fd);
         return;
@@ -302,7 +325,7 @@ void Response::dealPost() {
     std::string fullPath = rootPath + "/" + fileName;
     
     if (isCGI(requestPath)) {
-        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath());
+        CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath(), this->_server_fds, _epoll_fd);
         cgi.executeCGI(this->_request.getMethod());
         close(_client_fd);
         return;
@@ -356,7 +379,8 @@ void Response::safeSend(int statusCode,
 
     std::string respStr = response.str();
     if (send(_client_fd, respStr.c_str(), respStr.size(), MSG_NOSIGNAL) <= 0) {
-        std::cerr << "Error sending response: " << strerror(errno) << std::endl;
+        std::cerr << "Error sending response" << std::endl;
+		return ;
     }
     _responseHeaders.clear();
     close(_client_fd);
@@ -541,3 +565,14 @@ std::string Response::getSessionData(const std::string &key) const {
     return sessionManager.getSessionData(_sessionId, key);
 }
 
+
+void Response::cleanup(int _epoll_fd, const std::vector<int> &server_fds) {
+    if (_epoll_fd != -1) {
+        close(_epoll_fd);
+    }
+    for (std::vector<int>::const_iterator it = server_fds.begin(); it != server_fds.end(); ++it) {
+        close(*it);
+    }
+    const_cast<std::vector<int>&>(server_fds).shrink_to_fit();
+    
+}

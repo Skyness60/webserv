@@ -2,8 +2,8 @@
 #include <sys/select.h>    
 #include <signal.h>        
 
-CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName)
-    :  _config(config), _serverIndex(serverIndex), _request(request)
+CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName, std::vector<int> &server_fds, int &epoll_fd)
+    :  _config(config), _serverIndex(serverIndex), _request(request), _server_fds(server_fds), _epoll_fd(epoll_fd)
 {
 	_locationName = locationName;
 	size_t lastSlash = _locationName.find_last_of('/');
@@ -11,7 +11,7 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, 
 		_locationName = _locationName.substr(0, lastSlash + 1);
 	}
 	_client_fd = client_fd;
-	_response = new Response(client_fd, request, config, serverIndex);
+	_response = new Response(client_fd, request, config, serverIndex, server_fds, epoll_fd);
 	_root = _config.getConfigValue(serverIndex, "root");
 
 	std::string reqPath = _request.getPath();
@@ -65,8 +65,15 @@ found_cgi:
 	initEnv(this->_env);
 }
 
-CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverIndex(copy._serverIndex), _request(copy._request), _response(copy._response)
+CGIManager::CGIManager(const CGIManager &copy)
+	: _config(copy._config),
+	  _serverIndex(copy._serverIndex),
+	  _request(copy._request),
+	  _server_fds(copy._server_fds),
+	  _epoll_fd(copy._epoll_fd),
+	  _response(copy._response)
 {
+	_client_fd = copy._client_fd;
 	_extension = copy._extension;
 	_path = copy._path;
 	_root = copy._root;
@@ -76,6 +83,8 @@ CGIManager::CGIManager(const CGIManager &copy) : _config(copy._config), _serverI
 CGIManager &CGIManager::operator=(const CGIManager &copy) {
 	if (this != &copy) {
 		_config = copy._config;
+		_server_fds = copy._server_fds;
+		_epoll_fd = copy._epoll_fd;
 		_serverIndex = copy._serverIndex;
 		_extension = copy._extension;
 		_path = copy._path;
@@ -171,6 +180,13 @@ static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodyS
 	return finalHeaders;
 }
 
+static void execve_handler(){
+	char* const args2[] = { (char*)"true", nullptr };
+	char* const env2[] = { nullptr };
+	execve("/bin/true", args2, env2);
+	perror("execve");
+}
+
 
 void CGIManager::executeCGI(const std::string &method) {
     (void)method;
@@ -178,21 +194,34 @@ void CGIManager::executeCGI(const std::string &method) {
 
     int pipe_in[2];
     int pipe_out[2];
-	if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-		perror("pipe");
-		return;
-	}
-	pid_t pid = fork();
-	if (pid == -1) {
-		perror("fork");
-		return;
-	}
-	if (pid == 0) {
-		
-		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
+    if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
+        perror("pipe");
+        return;
+    }
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        return;
+    }
+    if (pid == 0) {
+		char *args[3];
+		char **env = NULL;
+        // CHILD
+        std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
 			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
+			close(pipe_in[0]);
+			close(pipe_out[1]);
+			close(pipe_in[1]);
+			close(pipe_out[0]);
+			this->_response->cleanup(this->_epoll_fd, this->_server_fds);
+			_response->handleNotFound();
+			close(_client_fd);
+			while (1){
+				execve_handler();
+				sleep(1);
+			}
 			exit(EXIT_FAILURE);
 		}
 		std::string shebang;
@@ -223,13 +252,12 @@ void CGIManager::executeCGI(const std::string &method) {
 			std::cerr << "Error: CGI interpreter not found or not executable: " << this->_path << std::endl;
 			exit(EXIT_FAILURE);
 		}
-		char **env = createEnvArray();
+		env = createEnvArray();
 		dup2(pipe_in[0], STDIN_FILENO);
 		dup2(pipe_out[1], STDOUT_FILENO);
 		dup2(pipe_out[1], STDERR_FILENO); 
-		close(pipe_in[0]);
-		close(pipe_out[1]);
-		char *args[3];
+		close(pipe_in[1]);
+        close(pipe_out[0]);
 		args[0] = new char[this->_path.size() + 1];
 		strcpy(args[0], this->_path.c_str());
 		args[1] = new char[scriptPath.size() + 1];
@@ -237,40 +265,44 @@ void CGIManager::executeCGI(const std::string &method) {
 		args[2] = NULL;
 		execve(this->_path.c_str(), args, env);
 		perror("execl");
-		delete [] args[0];
-		delete [] args[1];
-		delete [] env;
-		exit(EXIT_FAILURE);
+		while (1){
+			execve_handler();
+			sleep(1);
+		}
 	}
-	else {
-		
-		close(pipe_in[0]);
-		close(pipe_out[1]);
+    else {
 
-		
-		fd_set rfds;
-		FD_ZERO(&rfds);
-		FD_SET(pipe_out[0], &rfds);
-		struct timeval tv;
-		tv.tv_sec = CGI_TIMEOUT;
-		tv.tv_usec = 0;
-		int sel = select(pipe_out[0] + 1, &rfds, NULL, NULL, &tv);
+        close(pipe_in[0]);
+        close(pipe_out[1]);
+
+        std::string body = _request.getBody();
+        if (!body.empty()) {
+            ssize_t totalWritten = 0;
+            ssize_t toWrite = body.size();
+            const char* buf = body.c_str();
+            while (totalWritten < toWrite) {
+                ssize_t written = write(pipe_in[1], buf + totalWritten, toWrite - totalWritten);
+                if (written <= 0) break;
+                totalWritten += written;
+            }
+        }
+        close(pipe_in[1]);
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(pipe_out[0], &rfds);
+        struct timeval tv;
+        tv.tv_sec = CGI_TIMEOUT;
+        tv.tv_usec = 0;
+        int sel = select(pipe_out[0] + 1, &rfds, NULL, NULL, &tv);
 		if (sel == 0) {
-			
-			kill(pid, SIGKILL);
-			close(pipe_out[0]);
-			_response->safeSend(500, "Internal Server Error",
-                                "CGI script timed out.\n",
-                                "text/plain", true);
-			return;
 		}
-		
-		char buffer[4096];
-		ssize_t bytesRead;
-		std::string cgiOutput;
-		while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0) {
-			cgiOutput.append(buffer, bytesRead);
-		}
+        char buffer[4096];
+        ssize_t bytesRead;
+        std::string cgiOutput;
+        while ((bytesRead = read(pipe_out[0], buffer, sizeof(buffer))) > 0) {
+            cgiOutput.append(buffer, bytesRead);
+        }
 
 		if (bytesRead == -1) {
 			perror("read");
@@ -320,4 +352,3 @@ std::string CGIManager::getRoot() const {
 std::string CGIManager::getLocationName() const {
 	return _locationName;
 }
-

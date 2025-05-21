@@ -6,6 +6,8 @@
 class ServerManager {
 	private:
 		std::string _filename;
+		std::vector<int> _server_fds;
+		int _epoll_fd;
 		Config _config;
 		int _port;
 		int createAndBindSocket(int serverIndex);
@@ -15,7 +17,6 @@ class ServerManager {
 		void handleNewConnection(int server_fd, int epoll_fd);
 		void handleClientRequest(int client_fd, int epoll_fd);
 		void handleWriteReady(int client_fd);
-		void cleanup(int epoll_fd, const std::vector<int> &server_fds);
 		std::string extractHostname(const std::string& hostHeader);
 		int findServerByHostAndPort(const std::string& hostname, int port);
 	public:
@@ -32,4 +33,5 @@ class ServerManager {
 		int getServersCount();
 		std::vector<std::string> getLocationName(int index);
 		int getLocationCount(int serverIndex);
+		void cleanup(int _epoll_fd, const std::vector<int> &server_fds);
 };

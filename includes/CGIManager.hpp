@@ -8,16 +8,19 @@ class CGIManager {
 		Config &_config; // Référence à la configuration du serveur
 		int _client_fd; // Descripteur de fichier du client
 		int _serverIndex; // Index du serveur
+
 		ClientRequest &_request; // Référence à la requête du client
 		std::string _extension; // Extension du fichier CGI
 		std::string _path; // L'interpreteur CGI
 		std::string _root; // Le répertoire racine du serveur
 		std::string _locationName; // Nom de la location de l'endroit du CGI
 		std::map<std::string, std::string> _env; // Variables d'environnement pour le CGI
+		std::vector<int> &_server_fds; // Descripteurs de fichiers des serveurs
+		int &_epoll_fd; // Descripteur de fichier de l'epoll
 		void initEnv(std::map<std::string, std::string> &env); // Initialise les variables d'environnement pour le CGI
 		Response *_response; // Réponse associée à la requête
 	public:
-		CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName);
+		CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName, std::vector<int> &server_fds, int &epoll_fd);
 		CGIManager(const CGIManager &copy);
 		CGIManager &operator=(const CGIManager &copy);
 		~CGIManager();
