@@ -672,13 +672,10 @@
                             a.href = url;
                             a.download = fileName;
                             
-                            // Append the link to the body (required for Firefox)
                             document.body.appendChild(a);
                             
-                            // Programmatically click the link to trigger the download
                             a.click();
                             
-                            // Clean up
                             document.body.removeChild(a);
                             URL.revokeObjectURL(url);
                             document.body.removeChild(formatDialog);
@@ -688,7 +685,6 @@
                         });
                     });
                     
-                    // Handle cancel button
                     const cancelButton = formatDialog.querySelector('.format-cancel-btn');
                     cancelButton.addEventListener('click', function() {
                         document.body.removeChild(formatDialog);

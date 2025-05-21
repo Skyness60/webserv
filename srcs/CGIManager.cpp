@@ -1,4 +1,6 @@
 #include "CGIManager.hpp"
+#include <sys/select.h>    
+#include <signal.h>        
 
 CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, int client_fd, std::string locationName)
     :  _config(config), _serverIndex(serverIndex), _request(request)
@@ -8,16 +10,13 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, 
 	if (lastSlash != std::string::npos) {
 		_locationName = _locationName.substr(0, lastSlash + 1);
 	}
-	std::cout << "locationName: " << _locationName << std::endl;
 	_client_fd = client_fd;
 	_response = new Response(client_fd, request, config, serverIndex);
 	_root = _config.getConfigValue(serverIndex, "root");
 
 	std::string reqPath = _request.getPath();
 	size_t dot = reqPath.find_last_of('.');
-	std::cout << "reqPath: " << reqPath << std::endl;
 	std::string reqExt = (dot != std::string::npos) ? reqPath.substr(dot + 1) : "";
-	std::cout << "reqExt: " << reqExt << std::endl;
 
 	std::string scriptPath = _root + "/" + reqPath;
 	std::ifstream scriptFile(scriptPath.c_str());
@@ -31,7 +30,6 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, 
 			if (pos != std::string::npos) {
 				shebangInterpreter = shebangInterpreter.substr(0, pos);
 			}
-			std::cout << "Shebang interpreter found: " << shebangInterpreter << std::endl;
 		}
 		scriptFile.close();
 	}
@@ -48,12 +46,10 @@ CGIManager::CGIManager(Config &config, int serverIndex, ClientRequest &request, 
 			std::istringstream iss(cgiExt);
 			std::string extToken;
 			while (iss >> extToken) {
-				std::cout << "Testing extToken: " << extToken << std::endl;
 				if (extToken == reqExt || extToken == "." + reqExt) {
 					_extension = extToken;
 					_path      = _config.getLocationValue(serverIndex, *it, "cgi_path");
 					std::string cgiRoot = _config.getLocationValue(serverIndex, *it, "cgi_root");
-					std::cout << "======================cgiRoot: " << cgiRoot << std::endl;
 					if (!cgiRoot.empty())
 						_root = cgiRoot;
 					else
@@ -122,10 +118,10 @@ char **CGIManager::createEnvArray() {
 std::pair<std::string, std::string> CGIManager::parseCGIResponse(const std::string &cgiOutput)
 {
 	size_t headerEnd = cgiOutput.find("\r\n\r\n");
-	//size_t skip = 4;
+	
 	if (headerEnd == std::string::npos) {
 		headerEnd = cgiOutput.find("\n\n");
-		//skip = 2;
+		
 	}
 	if (headerEnd == std::string::npos) {
 		return std::make_pair("", cgiOutput);
@@ -170,17 +166,18 @@ static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodyS
 	if (!hasContentLength)
 		finalHeaders += "Content-Length: " + std::to_string(bodySize) + "\r\n";
 	if (!hasContentType)
-		finalHeaders += "Content-Type: text/html\r\n"; // ou text/plain par défaut
+		finalHeaders += "Content-Type: text/html\r\n"; 
 	finalHeaders += "Connection: close\r\n";
 	return finalHeaders;
 }
 
 
 void CGIManager::executeCGI(const std::string &method) {
-	(void)method;
-	
-	int pipe_in[2];
-	int pipe_out[2];
+    (void)method;
+    const int CGI_TIMEOUT = 10; 
+
+    int pipe_in[2];
+    int pipe_out[2];
 	if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
 		perror("pipe");
 		return;
@@ -191,8 +188,8 @@ void CGIManager::executeCGI(const std::string &method) {
 		return;
 	}
 	if (pid == 0) {
+		
 		std::string scriptPath = _root + "/" + getScriptName(_request.getPath());
-		std::cout << "Script path: ==================== " << scriptPath << std::endl;
 		std::ifstream scriptFile(scriptPath.c_str());
 		if (!scriptFile.is_open()) {
 			std::cerr << "Error: Unable to open script file: " << scriptPath << std::endl;
@@ -217,7 +214,6 @@ void CGIManager::executeCGI(const std::string &method) {
 			std::cerr << "Error: No interpreter found for script: " << scriptPath << std::endl;
 			exit(EXIT_FAILURE);
 		}
-		std::cout << "Interpreter path: " << this->_path << std::endl;
 		struct stat pathStat;
 		if (stat(this->_path.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
 			std::cerr << "Error: CGI interpreter path is a directory: " << this->_path << std::endl;
@@ -230,6 +226,7 @@ void CGIManager::executeCGI(const std::string &method) {
 		char **env = createEnvArray();
 		dup2(pipe_in[0], STDIN_FILENO);
 		dup2(pipe_out[1], STDOUT_FILENO);
+		dup2(pipe_out[1], STDERR_FILENO); 
 		close(pipe_in[0]);
 		close(pipe_out[1]);
 		char *args[3];
@@ -245,16 +242,29 @@ void CGIManager::executeCGI(const std::string &method) {
 		delete [] env;
 		exit(EXIT_FAILURE);
 	}
-	else{
+	else {
+		
 		close(pipe_in[0]);
 		close(pipe_out[1]);
-		const std::string &body = _request.getBody();
-		if (write(pipe_in[1], body.c_str(), body.size()) < 0) {
-			perror("write");
-			close(pipe_in[1]);
+
+		
+		fd_set rfds;
+		FD_ZERO(&rfds);
+		FD_SET(pipe_out[0], &rfds);
+		struct timeval tv;
+		tv.tv_sec = CGI_TIMEOUT;
+		tv.tv_usec = 0;
+		int sel = select(pipe_out[0] + 1, &rfds, NULL, NULL, &tv);
+		if (sel == 0) {
+			
+			kill(pid, SIGKILL);
+			close(pipe_out[0]);
+			_response->safeSend(500, "Internal Server Error",
+                                "CGI script timed out.\n",
+                                "text/plain", true);
 			return;
 		}
-		close(pipe_in[1]);
+		
 		char buffer[4096];
 		ssize_t bytesRead;
 		std::string cgiOutput;
@@ -271,26 +281,26 @@ void CGIManager::executeCGI(const std::string &method) {
 			return;
 		}
 		close(pipe_out[0]);
+
 		int status;
 		waitpid(pid, &status, 0);
-		if (WIFEXITED(status) and WEXITSTATUS(status) not_eq 0) {
+		if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
 			std::cerr << "CGI script exited with status: " << WEXITSTATUS(status) << std::endl;
-			_response->handleNotFound();
+			_response->safeSend(500, "Internal Server Error",
+                                "CGI script error.\n",
+                                "text/plain", true);
 			return;
 		}
+
 		std::pair<std::string, std::string> parsed = parseCGIResponse(cgiOutput);
 		std::string response = "HTTP/1.1 200 OK\r\n";
 		response += buildFinalHeaders(parsed.first, parsed.second.size());
-		response += "\r\n";
-		response += parsed.second;
-		if (send(_client_fd, response.c_str(), response.length(), 0) <= 0) {
-			std::cerr << "Error sending response: " << strerror(errno) << std::endl;
-		}
-		
-		// Properly close the connection after sending the response
-		if (shutdown(_client_fd, SHUT_RDWR) < 0) {
-			std::cerr << "Shutdown error on client_fd " << _client_fd << ": " << strerror(errno) << std::endl;
-		}
+		response += "\r\n" + parsed.second;
+		LOG_INFO("CGIManager sending HTTP code: 200");
+        if (send(_client_fd, response.c_str(), response.length(), 0) <= 0) {
+            perror("send CGI response");
+        }
+		shutdown(_client_fd, SHUT_RDWR);
 		close(_client_fd);
 	}
 }

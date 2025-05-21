@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   DdosProtection.cpp                                 :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/04/22 10:00:00 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/16 17:18:39 by okapshai         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "DdosProtection.hpp"
 
 DdosProtection::DdosProtection(int rateWindow, int maxRequests, int blockDuration) :
@@ -46,7 +34,7 @@ DdosProtection::~DdosProtection() {}
 
 size_t DdosProtection::getMaxBodySize() const { return _maxBodySize; }
 
-//--------------------------------------------------------------Methods
+
 
 bool DdosProtection::isClientBlocked(const std::string& clientIp) {
     

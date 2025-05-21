@@ -3,18 +3,19 @@
 #include "EpollManager.hpp"
 #include "SignalHandler.hpp"
 #include "DdosProtection.hpp"
+#include "Logger.hpp"  
 
-// Constructeur qui initialise le gestionnaire de serveur avec un fichier de configuration
+
 ServerManager::ServerManager(std::string filename) : _filename(filename), _config(filename) {
     loadConfig();
 }
 
-// Constructeur de copie
+
 ServerManager::ServerManager(const ServerManager &copy) : _filename(copy._filename), _config(copy._filename) {
     loadConfig();
 }
 
-// Opérateur d'affectation
+
 ServerManager &ServerManager::operator=(const ServerManager &copy) {
     if (this != &copy) {
         _filename = copy._filename;
@@ -24,19 +25,20 @@ ServerManager &ServerManager::operator=(const ServerManager &copy) {
     return *this;
 }
 
-// Destructeur
+
 ServerManager::~ServerManager() {
-    // Implémentation du destructeur
+    
 } 
 
-// Charge la configuration à partir du fichier
+
 void ServerManager::loadConfig() {
-    // Cette fonction est actuellement désactivée (code commenté)
-    // Elle pourrait lire et afficher le contenu du fichier de configuration
+    
+    
 }
 
-// Fonction principale pour démarrer le serveur
+
 void ServerManager::startServer() {
+    LOG_INFO("startServer called");
     SocketManager socketManager;
     EpollManager epollManager;
 
@@ -61,7 +63,7 @@ void ServerManager::startServer() {
     cleanup(epoll_fd, server_fds);
 }
 
-// Gère une nouvelle connexion client
+
 void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
     struct sockaddr_in client_address;
     socklen_t client_len = sizeof(client_address);
@@ -70,8 +72,9 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
         perror("accept");
         return;
     }
+    LOG_INFO("New connection: client_fd=" << client_fd << " on server_fd=" << server_fd);
 
-    // Retrieve the port of the incoming connection
+    
     struct sockaddr_in server_address;
     socklen_t server_len = sizeof(server_address);
     if (getsockname(server_fd, (struct sockaddr *)&server_address, &server_len) == -1) {
@@ -81,7 +84,7 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
     }
     int incomingPort = ntohs(server_address.sin_port);
 
-    // Match the port with the correct server index
+    
     for (int i = 0; i < getServersCount(); ++i) {
         std::string listenValue = getConfigValue(i, "listen");
 		if (!listenValue.empty())
@@ -107,14 +110,12 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
         close(client_fd);
         return;
     }
-
-    std::cout << "Nouveau client connecté: " << client_fd << " sur le port: " << incomingPort << " (Server Index: " << _port << ")" << std::endl;
 }
 
 
-// Gère une requête client
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
-    const size_t buffer_size = 8192; // 8KB buffer size
+    LOG_INFO("handleClientRequest: client_fd=" << client_fd);
+    const size_t buffer_size = 8192; 
     static DdosProtection ddosProtector(DDOS_DEFAULT_RATE_WINDOW, 
         DDOS_DEFAULT_MAX_REQUESTS, 
         DDOS_DEFAULT_BLOCK_DURATION);
@@ -155,7 +156,6 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
     } while (valread > 0);
     
     if (totalRead <= 0) {
-        std::cout << "Client déconnecté: " << client_fd << std::endl;
         close(client_fd);
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         return;
@@ -217,7 +217,6 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
             }
         }
         
-        std::cout << "Selected server: " << _port << " for host: " << headers["Host"] << std::endl;
         Response response(client_fd, request, _config, this->_port);
         response.oriente();
     } else {
@@ -233,64 +232,65 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 }
 
 void ServerManager::handleWriteReady(int client_fd) {
+    LOG_INFO("handleWriteReady: client_fd=" << client_fd);
+    LOG_INFO("handleWriteReady sending HTTP code: 200");
     const char *message = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: text/plain\r\n\r\nHello, world!";
     ssize_t bytes_sent = send(client_fd, message, strlen(message), 0);
     if (bytes_sent <= 0) {
         perror("send");
-    } else {
-        std::cout << "Sent " << bytes_sent << " bytes to client " << client_fd << std::endl;
     }
     close(client_fd);
 }
 
 
 
-// Nettoie les ressources utilisées par le serveur
+
 void ServerManager::cleanup(int epoll_fd, const std::vector<int> &server_fds) {
+    LOG_INFO("cleanup: epoll_fd=" << epoll_fd << ", servers=" << server_fds.size());
     close(epoll_fd);
     for (std::vector<int>::const_iterator it = server_fds.begin(); it != server_fds.end(); ++it) {
         close(*it);
     }
 }
 
-// Récupère une valeur de configuration pour un serveur donné
+
 std::string ServerManager::getConfigValue(int server, std::string key) {
     return _config.getConfigValue(server, key);
 }
 
-// Récupère toutes les valeurs de configuration
+
 std::vector<std::map<std::string, std::string> > ServerManager::getConfigValues() {
     return _config.getConfigValues();
 }
 
-// Récupère les valeurs des locations
+
 std::vector<std::map<std::string, std::map<std::string, std::string> > > ServerManager::getLocationValues() {
     return _config.getLocationValues();
 }
 
-// Récupère une valeur spécifique pour une location
+
 std::string ServerManager::getLocationValue(int server, std::string locationKey, std::string valueKey) {
     return _config.getLocationValue(server, locationKey, valueKey);
 }
 
-// Récupère le nombre de serveurs configurés
+
 int ServerManager::getServersCount() {
     return _config.getConfigValues().size();
 }
 
-// Récupère les noms des locations pour un serveur donné
+
 std::vector<std::string> ServerManager::getLocationName(int index) {
     return _config.getLocationName(index);
 }
 
-// Récupère le nombre de locations pour un serveur donné
+
 int ServerManager::getLocationCount(int serverIndex) {
 	return _config.getLocationCount(serverIndex);
 }
 
-// Extract hostname from the Host header
+
 std::string ServerManager::extractHostname(const std::string& hostHeader) {
-    // Remove port if present (example.com:2222 -> example.com)
+    
     size_t colonPos = hostHeader.find(':');
     if (colonPos != std::string::npos) {
         return hostHeader.substr(0, colonPos);

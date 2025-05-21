@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Includes.hpp"
-#include "Config.hpp" // Inclure la définition complète ici
+#include "Config.hpp" 
 #include "Response.hpp"
 #include "ClientRequest.hpp"
 
-class Config; // Forward declaration of Config class
+class Config; 
 class ClientRequest; 
 class CGIManager;
 
@@ -23,7 +23,7 @@ class Response{
 		std::map<std::string, std::string> _requestHeaders;
 		std::string _requestBody;
 		std::string generateAutoIndex(const std::string &directoryPath, const std::string &requestPath);
-		std::string _sessionId;           // current session ID
+		std::string _sessionId;           
 		std::vector<std::pair<std::string, std::string>> _responseHeaders;
 
 	public :
@@ -42,4 +42,8 @@ class Response{
 		void safeSend(int statusCode, const std::string &statusMessage, const std::string &body, const std::string &contentType = "text/html", bool closeConnection = false);
 		void addCookie(const std::string &name, const std::string &value, const std::string &path = "/", const std::string &domain = "", int maxAge = 0);
 		void handleNotFound();
+
+		
+		void setSessionData(const std::string &key, const std::string &value);
+		std::string getSessionData(const std::string &key) const;
 };
