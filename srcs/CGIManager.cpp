@@ -328,7 +328,7 @@ void CGIManager::executeCGI(const std::string &method) {
 		std::string response = "HTTP/1.1 200 OK\r\n";
 		response += buildFinalHeaders(parsed.first, parsed.second.size());
 		response += "\r\n" + parsed.second;
-		LOG_INFO("CGIManager sending HTTP code: 200");
+		LOG_INFO(FGRN("CGIManager sending HTTP code: 200"));
         if (send(_client_fd, response.c_str(), response.length(), 0) <= 0) {
             perror("send CGI response");
         }

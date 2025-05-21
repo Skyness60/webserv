@@ -74,7 +74,7 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 		close(server_fd);
         return;
     }
-    LOG_INFO("New connection: client_fd=" << client_fd << " on server_fd=" << server_fd);
+    LOG_INFO(FBLU("New connection: client_fd = ") << client_fd << FBLU(" on server_fd = ") << server_fd);
 
     
     struct sockaddr_in server_address;
@@ -116,7 +116,7 @@ void ServerManager::handleNewConnection(int server_fd, int epoll_fd) {
 
 
 void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
-    LOG_INFO("handleClientRequest: client_fd=" << client_fd);
+    LOG_INFO(FGRN("handleClientRequest: client_fd = ") << client_fd);
     const size_t buffer_size = 8192; 
     static DdosProtection ddosProtector(DDOS_DEFAULT_RATE_WINDOW, 
         DDOS_DEFAULT_MAX_REQUESTS, 
@@ -234,8 +234,8 @@ void ServerManager::handleClientRequest(int client_fd, int epoll_fd) {
 }
 
 void ServerManager::handleWriteReady(int client_fd) {
-    LOG_INFO("handleWriteReady: client_fd=" << client_fd);
-    LOG_INFO("handleWriteReady sending HTTP code: 200");
+    LOG_INFO(FGRN("handleWriteReady: client_fd=") << client_fd);
+    LOG_INFO(FGRN("handleWriteReady sending HTTP code: 200"));
     const char *message = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: text/plain\r\n\r\nHello, world!";
     ssize_t bytes_sent = send(client_fd, message, strlen(message), 0);
     if (bytes_sent <= 0) {

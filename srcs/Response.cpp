@@ -102,7 +102,7 @@ static std::string parseCookieHeader(const std::string &hdr, const std::string &
 }
 
 void Response::dealGet() {
-	LOG_INFO("dealGet: client_fd=" << _client_fd << ", path=" << _requestPath);
+	LOG_INFO(FGRN("dealGet: client_fd = " ) << _client_fd);
 	std::string alias = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "alias");
     std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
     if (root.empty()) {
@@ -136,9 +136,7 @@ void Response::dealGet() {
         }
     }
 
-    // --- FIX: check CGI file existence before running CGIManager ---
     if (isCGI(this->_request.getPath())) {
-        // Handle cgi_root or alias for CGI scripts
         std::string cgiPath;
         size_t lastSlash = this->_request.getPath().find_last_of('/');
         std::string cgiRequestPath = this->_request.getPath();
@@ -240,7 +238,7 @@ std::string Response::generateAutoIndex(const std::string &directoryPath, const 
 }
 
 void Response::dealDelete() {
-    LOG_INFO("dealDelete: client_fd=" << _client_fd << ", path="<< _requestPath);
+    LOG_INFO(FGRN("dealDelete: client_fd = " ) << _client_fd);
     std::string requestPath = this->_requestPath;
     std::string rootPath = "";
     rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
@@ -288,7 +286,7 @@ void Response::dealDelete() {
 }
 
 void Response::dealPost() {
-    LOG_INFO("dealPost: client_fd=" << _client_fd << ", path="<< _requestPath);
+    LOG_INFO(FGRN("dealPost: client_fd= ") << _client_fd);
     std::string requestPath = this->_requestPath;
     std::string rootPath = "";
 
@@ -360,7 +358,7 @@ void Response::safeSend(int statusCode,
                         const std::string &contentType,
                         bool closeConnection)
 {
-    LOG_INFO("Sending HTTP code: " << statusCode);
+    LOG_INFO(FGRN("Sending HTTP code: ") << statusCode);
     std::ostringstream response;
     response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
@@ -529,7 +527,7 @@ void Response::handleHttpVersionNotSupported(const std::string &version) {
 }
 
 void Response::handleRedirect(const std::string &redirectUrl) {
-    LOG_INFO("handleRedirect sending HTTP code: 301");
+    LOG_INFO(FGRN("handleRedirect sending HTTP code: 301"));
     std::ostringstream body;
     std::ostringstream response;
     response << "HTTP/1.1 301 Moved Permanently\r\n";
