@@ -39,3 +39,4 @@
 #include <ctime>
 //#include <sys/event.h>		// for MAC
 #include <set>                  // std::set
+#include "Logger.hpp"           // Logger class

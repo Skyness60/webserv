@@ -1,5 +1,6 @@
 #include "Response.hpp"
 #include "SessionManager.hpp"
+#include "Logger.hpp"
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -53,21 +54,34 @@ static std::string getContentType(const std::string &path) {
     return "application/octet-stream";
 }
 
-static SessionManager sessionManager(3600); // Timeout de 1 heure
+static SessionManager sessionManager(3600); 
 
-// parse Cookie header for a given name
+
 static std::string parseCookieHeader(const std::string &hdr, const std::string &name) {
-    size_t pos = hdr.find(name + "=");
-    if (pos == std::string::npos) return "";
-    pos += name.size() + 1;
-    size_t end = hdr.find(';', pos);
-    return hdr.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+    std::istringstream iss(hdr);
+    std::string token;
+    while (std::getline(iss, token, ';')) {
+        
+        size_t start = token.find_first_not_of(" \t");
+        if (start == std::string::npos) continue;
+        size_t end = token.find_last_not_of(" \t");
+        std::string pair = token.substr(start, end - start + 1);
+
+        size_t eq = pair.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key   = pair.substr(0, eq);
+        std::string value = pair.substr(eq + 1);
+
+        if (key == name)
+            return value;
+    }
+    return "";
 }
 
 void Response::dealGet() {
+	LOG_INFO("dealGet: client_fd=" << _client_fd << ", path=" << _requestPath);
 	std::string alias = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "alias");
     std::string root = this->_config.getLocationValue(_indexServ, this->_request.getPath(), "root");
-    std::cout << "root :" << root << std::endl;
     if (root.empty()) {
         root = this->_config.getConfigValue(_indexServ, "root");
     }
@@ -76,12 +90,10 @@ void Response::dealGet() {
 	if (!alias.empty()) {
 		fullPath = alias;
 	}
-    std::cout << "fullPath: " << fullPath << std::endl;
 
     struct stat pathStat;
     if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
         std::string indexFile = _config.getLocationValue(_indexServ, this->_request.getPath(), "index");
-        std::cout << "indexFile :" << indexFile << std::endl;
         if (indexFile.empty() && this->_request.getPath() == "/") {
             indexFile = _config.getConfigValue(_indexServ, "index");
         } 
@@ -101,8 +113,31 @@ void Response::dealGet() {
         }
     }
 
-
+    // --- FIX: check CGI file existence before running CGIManager ---
     if (isCGI(this->_request.getPath())) {
+        // Handle cgi_root or alias for CGI scripts
+        std::string cgiPath;
+        size_t lastSlash = this->_request.getPath().find_last_of('/');
+        std::string cgiRequestPath = this->_request.getPath();
+        if (lastSlash != std::string::npos) {
+            cgiRequestPath = this->_request.getPath().substr(0, lastSlash + 1);
+        }
+        std::string cgiRoot = this->_config.getLocationValue(_indexServ, cgiRequestPath, "cgi_root");
+        std::string alias = this->_config.getLocationValue(_indexServ, cgiRequestPath, "alias");
+        if (!alias.empty()) {
+            cgiPath = alias;
+            std::cout << alias << std::endl;
+        } else if (!cgiRoot.empty()) {
+            cgiPath = cgiRoot;
+            std::cout << cgiRoot << std::endl;
+        } else {
+            cgiPath = fullPath;
+        }
+        struct stat cgiStat;
+        if (stat(cgiPath.c_str(), &cgiStat) != 0) {
+            handleNotFound();
+            return;
+        }
         CGIManager cgi(_config, _indexServ, this->_request, _client_fd, this->_request.getPath());
         cgi.executeCGI(this->_request.getMethod());
         close(_client_fd);
@@ -115,8 +150,45 @@ void Response::dealGet() {
         return;
     }
 
-    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::string body((std::istreambuf_iterator<char>(file)), {});
     std::string contentType = getContentType(fullPath);
+
+    
+    {
+        std::string msg = sessionManager.getSessionData(_sessionId, "message");
+        if (!msg.empty()) {
+            std::string snippet = "<div class=\"session-message\">" + msg + "</div>";
+            const std::string placeholder = "<!-- SESSION_MESSAGE -->";
+            size_t pos = body.find(placeholder);
+            if (pos != std::string::npos) {
+                body.replace(pos, placeholder.length(), snippet);
+            } else {
+                size_t bodyClose = body.rfind("</body>");
+                if (bodyClose != std::string::npos) {
+                    body.insert(bodyClose, snippet);
+                }
+            }
+        }
+    }
+    
+    {
+        std::string snippet = "<div class=\"session-id\">Session ID: " + _sessionId + "</div>";
+        const std::string placeholder = "<!-- SESSION_ID -->";
+        size_t pos = body.find(placeholder);
+        if (pos != std::string::npos) {
+            body.replace(pos, placeholder.length(), snippet);
+        } else {
+            
+            size_t headerOpen = body.find("<header");
+            if (headerOpen != std::string::npos) {
+                size_t tagEnd = body.find('>', headerOpen);
+                if (tagEnd != std::string::npos) {
+                    body.insert(tagEnd + 1, snippet);
+                }
+            }
+        }
+    }
+
     safeSend(200, "OK", body, contentType);
 }
 
@@ -145,6 +217,7 @@ std::string Response::generateAutoIndex(const std::string &directoryPath, const 
 }
 
 void Response::dealDelete() {
+    LOG_INFO("dealDelete: client_fd=" << _client_fd << ", path="<< _requestPath);
     std::string requestPath = this->_requestPath;
     std::string rootPath = "";
     rootPath = this->_config.getLocationValue(_indexServ, requestPath, "root");
@@ -192,7 +265,7 @@ void Response::dealDelete() {
 }
 
 void Response::dealPost() {
-    std::cout << "POST request received" << std::endl;
+    LOG_INFO("dealPost: client_fd=" << _client_fd << ", path="<< _requestPath);
     std::string requestPath = this->_requestPath;
     std::string rootPath = "";
 
@@ -248,15 +321,13 @@ void Response::dealPost() {
                 out << it->first << " : " << it->second << std::endl;
             }
         } else {
-            std::cout << "Writing body data to file" << std::endl;
             out << this->_requestBody;
             out.flush();
         }
         out.close();
         safeSend(201, "Created", "File created successfully.\n", "text/plain");
     } else {
-        std::string errorMsg = "Failed to open file for writing: " + fullPath;
-        safeSend(500, "Internal Server Error", errorMsg, "text/plain");
+        safeSend(500, "Internal Server Error", "Failed to open file for writing.", "text/plain");
     }
 }
 
@@ -266,6 +337,7 @@ void Response::safeSend(int statusCode,
                         const std::string &contentType,
                         bool closeConnection)
 {
+    LOG_INFO("Sending HTTP code: " << statusCode);
     std::ostringstream response;
     response << "HTTP/1.1 " << statusCode << " " << statusMessage << "\r\n";
     response << "Content-Length: " << body.size() << "\r\n";
@@ -307,18 +379,29 @@ void Response::handleUriTooLong(size_t maxLength) {
 }
 
 void Response::oriente() {
+    
+    sessionManager.cleanupExpiredSessions();
+
     {
-        std::string cookieHdr = _requestHeaders.count("Cookie") ? _requestHeaders["Cookie"] : "";
+        std::string cookieHdr = _requestHeaders.count("Cookie")
+                                ? _requestHeaders["Cookie"]
+                                : "";
         std::string sid = parseCookieHeader(cookieHdr, "SESSIONID");
-        bool newSession = !sessionManager.isValidSession(sid);
-        if (newSession) sid = sessionManager.createSession();
-        _sessionId = sid;
-        if (newSession) {
-            addCookie("SESSIONID", sid, "/", "", /* timeout */ 3600);
+        if (sid.empty()) {
+            
+            sid = sessionManager.createSession();
+        } else {
+            
+            if (!sessionManager.sessionExists(sid)) {
+                sessionManager.addSession(sid);
+            }
         }
+        _sessionId = sid;
+        
+        addCookie("SESSIONID", sid, "/", "", 3600);
     }
 
-    // --- REDIRECTION / ROUTAGE ---
+    
     std::string requestPath = this->_request.getPath();
     std::string redirectDirective = this->_config.getLocationValue(_indexServ, requestPath, "return");
     
@@ -365,12 +448,12 @@ void Response::oriente() {
 }
 
 bool Response::isCGI(std::string path) {
-    // extraire l'extension (sans le point)
+    
     size_t dot = path.find_last_of('.');
     if (dot == std::string::npos) return false;
     std::string ext = path.substr(dot + 1);
 
-    // comparer à chaque location configurée
+    
     for (std::string loc : _config.getLocationName(_indexServ)) {
         std::string extList = _config.getLocationValue(_indexServ, loc, "cgi_extension");
         if (extList.empty()) continue;
@@ -422,6 +505,7 @@ void Response::handleHttpVersionNotSupported(const std::string &version) {
 }
 
 void Response::handleRedirect(const std::string &redirectUrl) {
+    LOG_INFO("handleRedirect sending HTTP code: 301");
     std::ostringstream body;
     std::ostringstream response;
     response << "HTTP/1.1 301 Moved Permanently\r\n";
@@ -432,8 +516,6 @@ void Response::handleRedirect(const std::string &redirectUrl) {
     response << body.str();
 
     std::string responseStr = response.str();
-    std::cout << "Sending redirect response to: " << redirectUrl << std::endl;
-    
     send(_client_fd, responseStr.c_str(), responseStr.size(), MSG_NOSIGNAL);
 }
 
@@ -448,5 +530,14 @@ void Response::addCookie(const std::string &name,
     if (!domain.empty())  cookie << "; Domain=" << domain;
     if (maxAge > 0)       cookie << "; Max-Age=" << maxAge;
     _responseHeaders.emplace_back("Set-Cookie", cookie.str());
+}
+
+
+void Response::setSessionData(const std::string &key, const std::string &value) {
+    sessionManager.setSessionData(_sessionId, key, value);
+}
+
+std::string Response::getSessionData(const std::string &key) const {
+    return sessionManager.getSessionData(_sessionId, key);
 }
 

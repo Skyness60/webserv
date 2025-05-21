@@ -147,17 +147,13 @@ void Config::handleLocationBlockStart(const std::string &line, bool &inLocationB
         currentLocationPath = currentLocationPath.length() > 9 ? currentLocationPath.substr(9) : "";
         if (currentLocationPath.empty())
             throwError("Malformed location directive", lineCount, charCountAll, charCountLine);
-        std::cout << "currentLocationPath: " << currentLocationPath << std::endl;
         if (currentLocationPath[0] != '/')
             if (currentLocationPath[0] != '~')
                 throwError("Malformed location directive", lineCount, charCountAll, charCountLine);
-        std::cout << "currentLocationPath: " << currentLocationPath << std::endl;
         if (currentLocationPath.find("..") != std::string::npos)
             throwError("Malformed location directive", lineCount, charCountAll, charCountLine);
-        std::cout << "currentLocationPath: " << currentLocationPath << std::endl;
         if (currentLocationPath.find("//") != std::string::npos)
             throwError("Malformed location directive", lineCount, charCountAll, charCountLine);
-        std::cout << "currentLocationPath: " << currentLocationPath << std::endl;
         inLocationBlock = true;
         currentLocationConfig.clear();
     }

@@ -1,15 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   ClientRequest.cpp                                  :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: okapshai <okapshai@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/04/06 15:44:39 by okapshai          #+#    #+#             */
-/*   Updated: 2025/05/16 18:45:33 by okapshai         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include "ClientRequest.hpp"
 #include "DdosProtection.hpp"
 
@@ -56,7 +44,7 @@ std::string ClientRequest::getResourcePath() const { return _resourcePath; }
 std::map<std::string, std::string> ClientRequest::getQueryParams() const { return _queryParams; }
 std::map<std::string, std::string> ClientRequest::getFormData() const { return _formData; }
 
-//--------------------------------------------------------------Methods
+
 
 
 bool ClientRequest::parseMethod( std::istringstream & stream ) {
@@ -103,7 +91,6 @@ void ClientRequest::parseHeaders( std::istringstream & stream ) {
                 if (seenHeaders.find(key) != seenHeaders.end()) {
                     _headers.clear();
                     _headers["Invalid-Request"] = "Duplicate " + key + " header";
-                    std::cout << "Detected duplicate header: " << key << std::endl;
                     return;
                 }
                 seenHeaders.insert(key);
