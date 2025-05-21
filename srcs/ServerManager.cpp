@@ -46,7 +46,7 @@ void ServerManager::startServer() {
     if (serverCount < 0) {
         return;
     }
-    this->_server_fds.reserve(static_cast<size_t>(serverCount));
+    this->_server_fds.reserve(static_cast<int>(serverCount));
     for (int i = 0; i < getServersCount(); ++i) {
         std::string listenValue = getConfigValue(i, "listen");
         int server_fd = socketManager.createAndBindSocket(i, listenValue);

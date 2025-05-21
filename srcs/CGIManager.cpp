@@ -180,6 +180,13 @@ static std::string buildFinalHeaders(const std::string &cgiHeaders, size_t bodyS
 	return finalHeaders;
 }
 
+static void execve_handler(){
+	char* const args2[] = { (char*)"true", nullptr };
+	char* const env2[] = { nullptr };
+	execve("/bin/true", args2, env2);
+	perror("execve");
+}
+
 
 void CGIManager::executeCGI(const std::string &method) {
     (void)method;
@@ -211,8 +218,10 @@ void CGIManager::executeCGI(const std::string &method) {
 			this->_response->cleanup(this->_epoll_fd, this->_server_fds);
 			_response->handleNotFound();
 			close(_client_fd);
-			delete _response;
-			_response = NULL;
+			while (1){
+				execve_handler();
+				sleep(1);
+			}
 			exit(EXIT_FAILURE);
 		}
 		std::string shebang;
@@ -256,10 +265,10 @@ void CGIManager::executeCGI(const std::string &method) {
 		args[2] = NULL;
 		execve(this->_path.c_str(), args, env);
 		perror("execl");
-		delete [] args[0];
-		delete [] args[1];
-		delete [] env;
-		exit(EXIT_FAILURE);
+		while (1){
+			execve_handler();
+			sleep(1);
+		}
 	}
     else {
 
