@@ -86,3 +86,9 @@ _______________
 Running basic load test with 25 concurrent users for 30 seconds
 
 siege -c25 -t30S http://localhost:2222/index.html
+
+Stress commands :
+
+siege -b -t5M http://localhost:2222  # pendant 5 minutes
+htop # check if the RAM using by the programm doesnt grow to much
+netstat -an | grep "server number" # display closed connections from the server
